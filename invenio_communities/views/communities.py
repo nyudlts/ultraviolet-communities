@@ -13,6 +13,7 @@ from copy import deepcopy
 from flask import current_app, g, render_template
 from flask_babelex import lazy_gettext as _
 from flask_login import login_required
+from flask_principal import Permission, RoleNeed
 from invenio_records_resources.services.errors import PermissionDeniedError
 from invenio_vocabularies.proxies import current_service as vocabulary_service
 
@@ -20,6 +21,8 @@ from invenio_communities.proxies import current_communities
 
 from ..communities.resources.ui_schema import TypesSchema
 from .decorators import pass_community
+
+admin_permission = Permission(RoleNeed("admin"))
 
 VISIBILITY_FIELDS = [
     {
@@ -125,6 +128,7 @@ def load_custom_fields(dump_only_required=False):
 
 
 @login_required
+@admin_permission.require(http_exception=403)
 def communities_new():
     """Communities creation page."""
     return render_template(
