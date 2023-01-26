@@ -11,10 +11,10 @@
 
 """Community permissions."""
 
+from invenio_administration.generators import Administration
 from invenio_records_permissions.generators import (
     AnyUser,
     AuthenticatedUser,
-    Disable,
     SystemProcess,
 )
 from invenio_records_permissions.policies import BasePermissionPolicy
@@ -123,7 +123,16 @@ class CommunityPermissionPolicy(BasePermissionPolicy):
 
     # Abilities for featured communities
     can_featured_search = [AnyUser(), SystemProcess()]
-    can_featured_list = [SystemProcess()]
-    can_featured_create = [SystemProcess()]
-    can_featured_update = [SystemProcess()]
-    can_featured_delete = [SystemProcess()]
+    can_featured_list = [Administration(), SystemProcess()]
+    can_featured_create = [Administration(), SystemProcess()]
+    can_featured_update = [Administration(), SystemProcess()]
+    can_featured_delete = [Administration(), SystemProcess()]
+
+
+def can_perform_action(community, context):
+    """Check if the given action is available on the request."""
+    action = context.get("action")
+    identity = context.get("identity")
+    permission_policy_cls = context.get("permission_policy_cls")
+    permission = permission_policy_cls(action, community=community)
+    return permission.allows(identity)

@@ -7,8 +7,8 @@
  */
 
 import { createSearchAppInit } from "@js/invenio_search_ui";
-import { parametrize } from "react-overridable";
-import { DropdownSort } from '@js/invenio_search_ui/components';
+import { parametrize, overrideStore } from "react-overridable";
+import { DropdownSort } from "@js/invenio_search_ui/components";
 import { memberVisibilityTypes } from "../";
 import { MembersSearchBarElement } from "../../components/MembersSearchBarElement";
 import { MembersResults } from "../components/MembersResult";
@@ -18,26 +18,21 @@ import { MembersSearchLayout } from "../components/MembersSearchLayout";
 import { ManagerMembersResultItem } from "../manager_view/ManagerMembersResultItem";
 import { MembersSearchAppContext as MembersSearchAppContextCmp } from "../manager_view/MembersSearchAppContext";
 
-const dataAttr = document.getElementById(
-  "community-members-search-root"
-).dataset;
+const dataAttr = document.getElementById("community-members-search-root").dataset;
 const communitiesAllRoles = JSON.parse(dataAttr.communitiesAllRoles);
-const communitiesRolesCanUpdate = JSON.parse(
-  dataAttr.communitiesRolesCanUpdate
-);
+const communitiesRolesCanUpdate = JSON.parse(dataAttr.communitiesRolesCanUpdate);
 const permissions = JSON.parse(dataAttr.permissions);
 const community = JSON.parse(dataAttr.community);
 
-const ManagerMembersResultItemWithConfig = parametrize(
-  ManagerMembersResultItem,
-  {
-    config: {
-      rolesCanUpdate: communitiesRolesCanUpdate,
-      visibility: memberVisibilityTypes,
-      permissions: permissions,
-    },
-  }
-);
+const appName = "InvenioCommunities.MemberSearch";
+
+const ManagerMembersResultItemWithConfig = parametrize(ManagerMembersResultItem, {
+  config: {
+    rolesCanUpdate: communitiesRolesCanUpdate,
+    visibility: memberVisibilityTypes,
+    permissions: permissions,
+  },
+});
 
 const MembersSearchAppContext = parametrize(MembersSearchAppContextCmp, {
   community: community,
@@ -45,23 +40,26 @@ const MembersSearchAppContext = parametrize(MembersSearchAppContextCmp, {
 
 const MembersSearchLayoutWithConfig = parametrize(MembersSearchLayout, {
   roles: communitiesAllRoles,
+  appName: appName,
 });
 
 const defaultComponents = {
-  "ResultsList.item": ManagerMembersResultItemWithConfig,
-  "ResultsGrid.item": MembersResultsGridItem,
-  "SearchApp.layout": MembersSearchLayoutWithConfig,
-  "SearchBar.element": MembersSearchBarElement,
-  "SearchApp.results": MembersResults,
-  "ResultsList.container": MembersResultsContainer,
-  "Sort.element": DropdownSort,
+  [`${appName}.ResultsList.item`]: ManagerMembersResultItemWithConfig,
+  [`${appName}.ResultsGrid.item`]: MembersResultsGridItem,
+  [`${appName}.SearchApp.layout`]: MembersSearchLayoutWithConfig,
+  [`${appName}.SearchBar.element`]: MembersSearchBarElement,
+  [`${appName}.SearchApp.results`]: MembersResults,
+  [`${appName}.ResultsList.container`]: MembersResultsContainer,
+  [`${appName}.Sort.element`]: DropdownSort,
 };
+
+const overriddenComponents = overrideStore.getAll();
 
 // Auto-initialize search app
 createSearchAppInit(
-  defaultComponents,
+  { ...defaultComponents, ...overriddenComponents },
   true,
   "invenio-search-config",
-  false,
+  true,
   MembersSearchAppContext
 );

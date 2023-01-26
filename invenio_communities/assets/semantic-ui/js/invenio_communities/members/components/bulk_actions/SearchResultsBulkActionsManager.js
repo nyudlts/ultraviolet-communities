@@ -2,6 +2,7 @@ import { BulkActionsContext } from "./context";
 import React, { Component } from "react";
 import Overridable from "react-overridable";
 import _hasIn from "lodash/hasIn";
+import PropTypes from "prop-types";
 
 class SearchResultsBulkActionsManager extends Component {
   constructor(props) {
@@ -39,7 +40,7 @@ class SearchResultsBulkActionsManager extends Component {
   setAllSelected = (val, global = false) => {
     this.setState({ allSelected: val });
     if (global) {
-      for (const [key, value] of Object.entries(this.selected)) {
+      for (const [key] of Object.entries(this.selected)) {
         this.selected[key].selected = val;
       }
       if (val) {
@@ -54,7 +55,7 @@ class SearchResultsBulkActionsManager extends Component {
     const { children } = this.props;
     const { allSelected, selectedCount } = this.state;
     return (
-      <Overridable id="SearchResultsBulkActionsManager.layout">
+      <Overridable id="InvenioCommunities.SearchResultsBulkActionsManager.layout">
         <BulkActionsContext.Provider
           value={{
             bulkActionContext: this.selected,
@@ -73,7 +74,9 @@ class SearchResultsBulkActionsManager extends Component {
 
 SearchResultsBulkActionsManager.contextType = BulkActionsContext;
 
-SearchResultsBulkActionsManager.propTypes = {};
+SearchResultsBulkActionsManager.propTypes = {
+  children: PropTypes.node.isRequired,
+};
 
 export default Overridable.component(
   "SearchResultsBulkActionsManager",

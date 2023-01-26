@@ -14,8 +14,6 @@ import { withState } from "react-searchkit";
 import { withCancel } from "react-invenio-forms";
 
 class ManagerMemberBulkActionsCmp extends Component {
-  static contextType = BulkActionsContext;
-
   constructor(props) {
     super(props);
     const { community } = this.props;
@@ -26,6 +24,7 @@ class ManagerMemberBulkActionsCmp extends Component {
       modalOpen: false,
       currentAction: undefined,
       role: undefined,
+      visible: undefined,
       selectedMembers: {},
     };
   }
@@ -33,6 +32,8 @@ class ManagerMemberBulkActionsCmp extends Component {
   componentWillUnmount() {
     this.cancellableAction && this.cancellableAction.cancel();
   }
+
+  static contextType = BulkActionsContext;
 
   bulkAction = (action) => {
     action();
@@ -116,17 +117,14 @@ class ManagerMemberBulkActionsCmp extends Component {
     const { setAllSelected } = this.context;
 
     const actionToPerform = this.currentAction.action;
+    // eslint-disable-next-line react/destructuring-assignment
     const actionParameter = this.state[this.currentAction.actionParam];
 
-    const members = Object.entries(selectedMembers).map(
-      ([memberId, member]) => member
-    );
+    const members = Object.entries(selectedMembers).map(([memberId, member]) => member);
 
     this.setState({ loading: true });
 
-    this.cancellableAction = withCancel(
-      actionToPerform(members, actionParameter)
-    );
+    this.cancellableAction = withCancel(actionToPerform(members, actionParameter));
     try {
       await this.cancellableAction.promise;
 
@@ -163,6 +161,7 @@ class ManagerMemberBulkActionsCmp extends Component {
     const actionDisabled =
       loading ||
       selectedCount === 0 ||
+      // eslint-disable-next-line react/destructuring-assignment
       !this.state[this.currentAction.actionParam] === undefined;
 
     return (
@@ -221,6 +220,11 @@ class ManagerMemberBulkActionsCmp extends Component {
 
 ManagerMemberBulkActionsCmp.propTypes = {
   community: PropTypes.object.isRequired,
+  roles: PropTypes.array.isRequired,
+  visibilities: PropTypes.array.isRequired,
+  permissions: PropTypes.object.isRequired,
+  updateQueryState: PropTypes.func.isRequired,
+  currentQueryState: PropTypes.object.isRequired,
 };
 
 export const ManagerMemberBulkActions = withState(ManagerMemberBulkActionsCmp);

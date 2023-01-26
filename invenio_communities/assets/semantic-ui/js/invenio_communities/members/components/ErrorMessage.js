@@ -18,17 +18,15 @@ export class ErrorMessage extends Component {
           <Message.List>
             {errors.map((error) => {
               return (
-                <Message.Item>
+                <Message.Item key={error}>
                   {/* when there is no field Marshmallow returns _schema */}
-                  {error.field !== "_schema" && (
-                    <strong>{error.field}: </strong>
-                  )}
+                  {error.field !== "_schema" && <strong>{error.field}: </strong>}
                   {error.messages.length === 1 ? (
                     error.messages[0]
                   ) : (
                     <Message.List>
                       {error.messages.map((message) => (
-                        <Message.Item>{message}</Message.Item>
+                        <Message.Item key={message}>{message}</Message.Item>
                       ))}
                     </Message.List>
                   )}

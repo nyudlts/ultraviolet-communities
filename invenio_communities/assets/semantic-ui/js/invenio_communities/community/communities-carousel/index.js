@@ -8,6 +8,7 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import CommunitiesCarousel from "./CommunitiesCarousel";
+import { OverridableContext, overrideStore } from "react-overridable";
 
 const communitiesCarouselContainer = document.getElementById("communities-carousel");
 const title = communitiesCarouselContainer.dataset.title;
@@ -16,13 +17,17 @@ const intervalDelay = parseInt(communitiesCarouselContainer.dataset.intervalDela
 const animationSpeed = parseInt(communitiesCarouselContainer.dataset.animationSpeed);
 const defaultLogo = communitiesCarouselContainer.dataset.defaultLogo;
 
+const overriddenComponents = overrideStore.getAll();
+
 ReactDOM.render(
-  <CommunitiesCarousel
-    title={title}
-    fetchUrl={fetchUrl}
-    intervalDelay={intervalDelay}
-    animationSpeed={animationSpeed}
-    defaultLogo={defaultLogo}
-  />,
+  <OverridableContext.Provider value={overriddenComponents}>
+    <CommunitiesCarousel
+      title={title}
+      fetchUrl={fetchUrl}
+      intervalDelay={intervalDelay}
+      animationSpeed={animationSpeed}
+      defaultLogo={defaultLogo}
+    />
+  </OverridableContext.Provider>,
   communitiesCarouselContainer
 );

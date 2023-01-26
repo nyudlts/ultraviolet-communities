@@ -15,28 +15,18 @@ import {
 import { i18next } from "@translations/invenio_communities/i18next";
 import React from "react";
 import { GridResponsiveSidebarColumn } from "react-invenio-forms";
-import { parametrize } from "react-overridable";
-import {
-  Count,
-  ResultsList,
-  SearchBar,
-  Sort,
-  withState,
-} from "react-searchkit";
-import {
-  Button,
-  Card,
-  Container,
-  Grid,
-  Input,
-  Segment,
-} from "semantic-ui-react";
+import { parametrize, overrideStore } from "react-overridable";
+import { Count, ResultsList, SearchBar, Sort, withState } from "react-searchkit";
+import { Button, Card, Container, Grid, Input, Segment } from "semantic-ui-react";
 import { ComputerTabletCommunitiesItem } from "./communities_items/ComputerTabletCommunitiesItem";
 import { MobileCommunitiesItem } from "./communities_items/MobileCommunitiesItem";
 import {
   ContribSearchAppFacets,
   ContribBucketAggregationValuesElement,
 } from "@js/invenio_search_ui/components";
+import PropTypes from "prop-types";
+
+const appName = "InvenioCommunities.Search";
 
 function ResultsGridItemTemplate({ result }) {
   return (
@@ -56,6 +46,10 @@ function ResultsGridItemTemplate({ result }) {
   );
 }
 
+ResultsGridItemTemplate.propTypes = {
+  result: PropTypes.object.isRequired,
+};
+
 function ResultsItemTemplate({ result }) {
   return (
     <>
@@ -64,6 +58,10 @@ function ResultsItemTemplate({ result }) {
     </>
   );
 }
+
+ResultsItemTemplate.propTypes = {
+  result: PropTypes.object.isRequired,
+};
 
 export const CommunitiesResults = ({
   sortOptions,
@@ -99,9 +97,7 @@ export const CommunitiesResults = ({
                         values={sortOptions}
                         label={(cmp) => (
                           <>
-                            <label className="mr-10">
-                              {i18next.t("Sort by")}
-                            </label>
+                            <label className="mr-10">{i18next.t("Sort by")}</label>
                             {cmp}
                           </>
                         )}
@@ -122,6 +118,12 @@ export const CommunitiesResults = ({
       </Grid>
     )
   );
+};
+
+CommunitiesResults.propTypes = {
+  paginationOptions: PropTypes.object.isRequired,
+  sortOptions: PropTypes.object.isRequired,
+  currentResultsState: PropTypes.object.isRequired,
 };
 
 export const CommunitiesSearchBarElement = withState(
@@ -175,9 +177,15 @@ const RDMBucketAggregationElement = ({ title, containerCmp }) => {
     </Card>
   );
 };
+
+RDMBucketAggregationElement.propTypes = {
+  title: PropTypes.string.isRequired,
+  containerCmp: PropTypes.node.isRequired,
+};
+
 export const CommunitiesSearchLayout = (props) => {
   const [sidebarVisible, setSidebarVisible] = React.useState(false);
-
+  const { config } = props;
   return (
     <Container>
       <Grid>
@@ -221,10 +229,14 @@ export const CommunitiesSearchLayout = (props) => {
             width={4}
             open={sidebarVisible}
             onHideClick={() => setSidebarVisible(false)}
-            children={<SearchAppFacets aggs={props.config.aggs} />}
+            // eslint-disable-next-line react/no-children-prop
+            children={<SearchAppFacets aggs={config.aggs} appName={appName} />}
           />
           <Grid.Column mobile={16} tablet={16} computer={12}>
-            <SearchAppResultsPane layoutOptions={props.config.layoutOptions} />
+            <SearchAppResultsPane
+              layoutOptions={config.layoutOptions}
+              appName={appName}
+            />
           </Grid.Column>
         </Grid.Row>
       </Grid>
@@ -232,20 +244,31 @@ export const CommunitiesSearchLayout = (props) => {
   );
 };
 
+CommunitiesSearchLayout.propTypes = {
+  config: PropTypes.object.isRequired,
+};
+
 const ContribSearchAppFacetsWithConfig = parametrize(ContribSearchAppFacets, {
   help: false,
 });
 
 const defaultComponents = {
-  "BucketAggregation.element": RDMBucketAggregationElement,
-  "BucketAggregationValues.element": ContribBucketAggregationValuesElement,
-  "SearchApp.facets": ContribSearchAppFacetsWithConfig,
-  "ResultsList.item": ResultsItemTemplate,
-  "ResultsGrid.item": ResultsGridItemTemplate,
-  "SearchApp.layout": CommunitiesSearchLayout,
-  "SearchBar.element": CommunitiesSearchBarElement,
-  "SearchApp.results": CommunitiesResults,
+  [`${appName}.BucketAggregation.element`]: RDMBucketAggregationElement,
+  [`${appName}.BucketAggregationValues.element`]: ContribBucketAggregationValuesElement,
+  [`${appName}.SearchApp.facets`]: ContribSearchAppFacetsWithConfig,
+  [`${appName}.ResultsList.item`]: ResultsItemTemplate,
+  [`${appName}.ResultsGrid.item`]: ResultsGridItemTemplate,
+  [`${appName}.SearchApp.layout`]: CommunitiesSearchLayout,
+  [`${appName}.SearchBar.element`]: CommunitiesSearchBarElement,
+  [`${appName}.SearchApp.results`]: CommunitiesResults,
 };
 
+const overriddenComponents = overrideStore.getAll();
+
 // Auto-initialize search app
-createSearchAppInit(defaultComponents);
+createSearchAppInit(
+  { ...defaultComponents, ...overriddenComponents },
+  true,
+  "invenio-search-config",
+  true
+);

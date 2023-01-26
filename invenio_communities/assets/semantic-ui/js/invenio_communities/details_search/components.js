@@ -15,7 +15,7 @@ import _get from "lodash/get";
 import _isEmpty from "lodash/isEmpty";
 import _truncate from "lodash/truncate";
 import React from "react";
-import { withState } from "react-searchkit";
+import { withState, Count, Sort } from "react-searchkit";
 import {
   Button,
   Card,
@@ -31,11 +31,12 @@ import {
   Segment,
 } from "semantic-ui-react";
 import { GridResponsiveSidebarColumn } from "react-invenio-forms";
+import PropTypes from "prop-types";
 
 export const CommunityRecordResultsListItem = ({ result }) => {
-  const access_status_id = _get(result, "ui.access_status.id", "open");
-  const access_status = _get(result, "ui.access_status.title_l10n", "Open");
-  const access_status_icon = _get(result, "ui.access_status.icon", "unlock");
+  const accessStatusId = _get(result, "ui.access_status.id", "open");
+  const accessStatus = _get(result, "ui.access_status.title_l10n", "Open");
+  const accessStatusIcon = _get(result, "ui.access_status.icon", "unlock");
   const createdDate = _get(
     result,
     "ui.created_date_l10n_long",
@@ -43,22 +44,14 @@ export const CommunityRecordResultsListItem = ({ result }) => {
   );
   const creators = result.ui.creators.creators.slice(0, 3);
 
-  const description_stripped = _get(
-    result,
-    "ui.description_stripped",
-    "No description"
-  );
+  const descriptionStripped = _get(result, "ui.description_stripped", "No description");
 
   const publicationDate = _get(
     result,
     "ui.publication_date_l10n_long",
     "No publication date found."
   );
-  const resource_type = _get(
-    result,
-    "ui.resource_type.title_l10n",
-    "No resource type"
-  );
+  const resourceType = _get(result, "ui.resource_type.title_l10n", "No resource type");
   const subjects = _get(result, "ui.subjects", []);
   const title = _get(result, "metadata.title", "No title");
   const version = _get(result, "ui.version", null);
@@ -73,13 +66,11 @@ export const CommunityRecordResultsListItem = ({ result }) => {
             {publicationDate} ({version})
           </Label>
           <Label size="tiny" className="neutral">
-            {resource_type}
+            {resourceType}
           </Label>
-          <Label size="tiny" className={`access-status ${access_status_id}`}>
-            {access_status_icon && (
-              <i className={`icon ${access_status_icon}`} />
-            )}
-            {access_status}
+          <Label size="tiny" className={`access-status ${accessStatusId}`}>
+            {accessStatusIcon && <i className={`icon ${accessStatusIcon}`} />}
+            {accessStatus}
           </Label>
         </Item.Extra>
         <Item.Header as="h2">
@@ -89,11 +80,11 @@ export const CommunityRecordResultsListItem = ({ result }) => {
           <SearchItemCreators creators={creators} />
         </Item>
         <Item.Description>
-          {_truncate(description_stripped, { length: 350 })}
+          {_truncate(descriptionStripped, { length: 350 })}
         </Item.Description>
         <Item.Extra>
-          {subjects.map((subject, index) => (
-            <Label key={index} size="tiny">
+          {subjects.map((subject) => (
+            <Label key={subject.id} size="tiny">
               {subject.title_l10n}
             </Label>
           ))}
@@ -110,26 +101,30 @@ export const CommunityRecordResultsListItem = ({ result }) => {
   );
 };
 
+CommunityRecordResultsListItem.propTypes = {
+  result: PropTypes.object.isRequired,
+};
+
 // TODO: Update this according to the full List item template?
 export const CommunityRecordResultsGridItem = ({ result }) => {
-  const description_stripped = _get(
-    result,
-    "ui.description_stripped",
-    "No description"
-  );
+  const descriptionStripped = _get(result, "ui.description_stripped", "No description");
   return (
     <Card fluid href={`/records/${result.pid}`}>
       <Card.Content>
         <Card.Header>{result.metadata.title}</Card.Header>
         <Card.Description>
-          {_truncate(description_stripped, { length: 200 })}
+          {_truncate(descriptionStripped, { length: 200 })}
         </Card.Description>
       </Card.Content>
     </Card>
   );
 };
 
-export const CommunityRecordSearchAppLayout = ({ config }) => {
+CommunityRecordResultsGridItem.propTypes = {
+  result: PropTypes.object.isRequired,
+};
+
+export const CommunityRecordSearchAppLayout = ({ config, appName }) => {
   const [sidebarVisible, setSidebarVisible] = React.useState(false);
 
   return (
@@ -145,9 +140,32 @@ export const CommunityRecordSearchAppLayout = ({ config }) => {
         </Grid.Column>
 
         <Grid.Column mobile={14} tablet={14} computer={12} floated="right">
-          <SearchBar
-            placeholder={i18next.t("Search records in community...")}
-          />
+          <Grid>
+            <Grid.Column width={16}>
+              <SearchBar placeholder={i18next.t("Search records in community...")} />
+            </Grid.Column>
+
+            <Grid.Column width={4} textAlign="left">
+              <Count
+                label={(cmp) => (
+                  <>
+                    {cmp} {i18next.t("result(s) found")}
+                  </>
+                )}
+              />
+            </Grid.Column>
+            <Grid.Column width={12} textAlign="right">
+              <Sort
+                values={config.sortOptions}
+                label={(cmp) => (
+                  <>
+                    <label className="mr-10">{i18next.t("Sort by")}</label>
+                    {cmp}
+                  </>
+                )}
+              />
+            </Grid.Column>
+          </Grid>
         </Grid.Column>
 
         <Grid.Row>
@@ -155,15 +173,28 @@ export const CommunityRecordSearchAppLayout = ({ config }) => {
             width={4}
             open={sidebarVisible}
             onHideClick={() => setSidebarVisible(false)}
-            children={<SearchAppFacets aggs={config.aggs} />}
+            // eslint-disable-next-line react/no-children-prop
+            children={<SearchAppFacets aggs={config.aggs} appName={appName} />}
           />
           <Grid.Column mobile={16} tablet={16} computer={12}>
-            <SearchAppResultsPane layoutOptions={config.layoutOptions} />
+            <SearchAppResultsPane
+              layoutOptions={config.layoutOptions}
+              appName={appName}
+            />
           </Grid.Column>
         </Grid.Row>
       </Grid>
     </Container>
   );
+};
+
+CommunityRecordSearchAppLayout.propTypes = {
+  config: PropTypes.object.isRequired,
+  appName: PropTypes.string,
+};
+
+CommunityRecordSearchAppLayout.defaultProps = {
+  appName: "",
 };
 
 export const CommunityRecordSingleSearchBarElement = withState(
@@ -185,9 +216,9 @@ export const CommunityRecordSingleSearchBarElement = withState(
     return (
       <Input
         action={{
-          icon: "search",
-          onClick: onBtnSearchClick,
-          className: "search",
+          "icon": "search",
+          "onClick": onBtnSearchClick,
+          "className": "search",
           "aria-label": i18next.t("Search"),
         }}
         fluid
@@ -202,10 +233,7 @@ export const CommunityRecordSingleSearchBarElement = withState(
   }
 );
 
-export const CommunityRecordSearchBarElement = ({
-  queryString,
-  onInputChange,
-}) => {
+export const CommunityRecordSearchBarElement = ({ queryString, onInputChange }) => {
   const headerSearchbar = document.getElementById("header-search-bar");
   const searchbarOptions = headerSearchbar.dataset.options
     ? JSON.parse(headerSearchbar.dataset.options)
@@ -232,18 +260,21 @@ export const CommunityRecordSearchBarElement = ({
   }
 };
 
+CommunityRecordSearchBarElement.propTypes = {
+  queryString: PropTypes.string.isRequired,
+  onInputChange: PropTypes.func.isRequired,
+};
+
 export const CommunityToggleComponent = ({
   updateQueryFilters,
   userSelectionFilters,
   filterValue,
   label,
   title,
-  isChecked,
 }) => {
   const _isChecked = (userSelectionFilters) => {
     const isFilterActive =
-      userSelectionFilters.filter((filter) => filter[0] === filterValue[0])
-        .length > 0;
+      userSelectionFilters.filter((filter) => filter[0] === filterValue[0]).length > 0;
     return isFilterActive;
   };
 
@@ -251,7 +282,7 @@ export const CommunityToggleComponent = ({
     updateQueryFilters(filterValue);
   };
 
-  var isChecked = _isChecked(userSelectionFilters);
+  const isFilterChecked = _isChecked(userSelectionFilters);
   return (
     <Card className="borderless facet">
       <Card.Content>
@@ -264,20 +295,31 @@ export const CommunityToggleComponent = ({
           name="versions-toggle"
           id="versions-toggle"
           onClick={onToggleClicked}
-          checked={isChecked}
+          checked={isFilterChecked}
         />
       </Card.Content>
     </Card>
   );
 };
 
+CommunityToggleComponent.propTypes = {
+  updateQueryFilters: PropTypes.func.isRequired,
+  userSelectionFilters: PropTypes.array.isRequired,
+  filterValue: PropTypes.array.isRequired,
+  label: PropTypes.string.isRequired,
+  title: PropTypes.string.isRequired,
+};
+
 export const CommunityCountComponent = ({ totalResults }) => {
   return <Label>{totalResults.toLocaleString("en-US")}</Label>;
 };
 
+CommunityCountComponent.propTypes = {
+  totalResults: PropTypes.number.isRequired,
+};
+
 export const CommunityEmptyResults = (props) => {
-  const queryString = props.queryString;
-  const searchPath = props.searchPath || "/search";
+  const { queryString, searchPath, resetQuery } = props;
 
   return (
     <Grid>
@@ -291,7 +333,7 @@ export const CommunityEmptyResults = (props) => {
       </Grid.Row>
       <Grid.Row centered>
         <Grid.Column width={8} textAlign="center">
-          <Button primary onClick={props.resetQuery}>
+          <Button primary onClick={resetQuery}>
             <Icon name="search" />
             {i18next.t("Start over")}
           </Button>
@@ -304,15 +346,10 @@ export const CommunityEmptyResults = (props) => {
               {i18next.t("ProTip")}!
             </Header>
             <p>
-              <a
-                href={`${searchPath}?q=metadata.publication_date:[2017-01-01 TO *]`}
-              >
+              <a href={`${searchPath}?q=metadata.publication_date:[2017-01-01 TO *]`}>
                 metadata.publication_date:[2017-01-01 TO *]
               </a>{" "}
-              {i18next.t(
-                "will give you all the publications from 2017 until today"
-              )}
-              .
+              {i18next.t("will give you all the publications from 2017 until today")}.
             </p>
             <p>
               {i18next.t("For more tips, check out our ")}
@@ -328,6 +365,16 @@ export const CommunityEmptyResults = (props) => {
   );
 };
 
+CommunityEmptyResults.propTypes = {
+  queryString: PropTypes.string.isRequired,
+  resetQuery: PropTypes.func.isRequired,
+  searchPath: PropTypes.string,
+};
+
+CommunityEmptyResults.defaultProps = {
+  searchPath: "/search",
+};
+
 export const CommunityErrorComponent = ({ error }) => {
   return (
     <Message warning>
@@ -337,6 +384,10 @@ export const CommunityErrorComponent = ({ error }) => {
       </Message.Header>
     </Message>
   );
+};
+
+CommunityErrorComponent.propTypes = {
+  error: PropTypes.object.isRequired,
 };
 
 export function SearchItemCreators({ creators }) {
@@ -351,30 +402,22 @@ export function SearchItemCreators({ creators }) {
         icon = (
           <a
             className="identifier-link"
-            href={"https://orcid.org/" + `${firstId.identifier}`}
+            href={`https://orcid.org/${firstId.identifier}`}
             aria-label={`${creatorName}: ${i18next.t("ORCID profile")}`}
             title={`${creatorName}: ${i18next.t("ORCID profile")}`}
           >
-            <img
-              className="inline-id-icon"
-              src="/static/images/orcid.svg"
-              alt=""
-            />
+            <img className="inline-id-icon" src="/static/images/orcid.svg" alt="" />
           </a>
         );
         break;
       case "ror":
         icon = (
           <a
-            href={"https://ror.org/" + `${firstId.identifier}`}
+            href={`https://ror.org/${firstId.identifier}`}
             aria-label={`${creatorName}: ${i18next.t("ROR profile")}`}
             title={`${creatorName}: ${i18next.t("ROR profile")}`}
           >
-            <img
-              className="inline-id-icon"
-              src="/static/images/ror-icon.svg"
-              alt=""
-            />
+            <img className="inline-id-icon" src="/static/images/ror-icon.svg" alt="" />
           </a>
         );
         break;
@@ -397,8 +440,12 @@ export function SearchItemCreators({ creators }) {
     );
     return link;
   }
+
   return creators.map((creator, index) => (
-    <span className="creatibutor-wrap" key={index}>
+    <span
+      className="creatibutor-wrap"
+      key={creator.person_or_org?.identifiers?.identifier}
+    >
       {getLink(creator)}
       {getIcon(creator)}
       {index < creators.length - 1 && ";"}

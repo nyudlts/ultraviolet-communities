@@ -6,8 +6,7 @@
 
 import { CommunityLinksExtractor } from "../CommunityLinksExtractor";
 import { bulkMembersSerializer } from "../serializers";
-import { http } from "../config";
-import _sample from "lodash/sample";
+import { http } from "react-invenio-forms";
 
 export class CommunityInvitationsApi {
   #urls;

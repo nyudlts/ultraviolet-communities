@@ -7,7 +7,6 @@
 # under the terms of the MIT License; see LICENSE file for more details.
 
 """Community schema."""
-
 import re
 from functools import partial
 from uuid import UUID
@@ -94,7 +93,7 @@ class CommunityMetadataSchema(Schema):
     curation_policy = SanitizedHTML(validate=_not_blank(max=2000))
     page = SanitizedHTML(validate=_not_blank(max=2000))
 
-    type = fields.Nested(VocabularySchema)
+    type = fields.Nested(VocabularySchema, metadata={"type": "communitytypes"})
     website = fields.Url(validate=_not_blank())
     funding = fields.List(fields.Nested(FundingRelationSchema))
     organizations = fields.List(fields.Nested(AffiliationRelationSchema))
@@ -126,6 +125,7 @@ class CommunitySchema(BaseRecordSchema):
     )
     metadata = NestedAttribute(CommunityMetadataSchema, required=True)
     access = NestedAttribute(CommunityAccessSchema, required=True)
+
     custom_fields = NestedAttribute(
         partial(CustomFieldsSchema, fields_var="COMMUNITIES_CUSTOM_FIELDS")
     )
@@ -150,5 +150,10 @@ class CommunitySchema(BaseRecordSchema):
 class CommunityFeaturedSchema(Schema):
     """Community Featured Schema."""
 
-    id = fields.Int(metadata={"read_only": True})
-    start_date = fields.DateTime(required=True)
+    id = fields.Int(dump_only=True)
+    start_date = fields.DateTime(
+        required=True,
+        title="start date",
+        description="Accepted format: YYYY-MM-DD hh:mm",
+        placeholder="YYYY-MM-DD hh:mm",
+    )

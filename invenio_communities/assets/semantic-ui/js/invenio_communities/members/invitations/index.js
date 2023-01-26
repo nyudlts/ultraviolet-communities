@@ -7,7 +7,7 @@
  */
 
 import { createSearchAppInit } from "@js/invenio_search_ui";
-import { parametrize } from "react-overridable";
+import { parametrize, overrideStore } from "react-overridable";
 import { DropdownSort } from "@js/invenio_search_ui/components";
 import { InvitationsContextProvider as ContextProvider } from "../../api/invitations/InvitationsContextProvider";
 import { InvitationResultItem } from "./InvitationResultItem";
@@ -24,16 +24,13 @@ import {
   ExpireStatus,
 } from "@js/invenio_requests/request";
 
-
-const dataAttr = document.getElementById(
-  "community-invitations-search-root"
-).dataset;
+const dataAttr = document.getElementById("community-invitations-search-root").dataset;
 const community = JSON.parse(dataAttr.community);
 const communitiesAllRoles = JSON.parse(dataAttr.communitiesAllRoles);
-const communitiesRolesCanInvite = JSON.parse(
-  dataAttr.communitiesRolesCanInvite
-);
+const communitiesRolesCanInvite = JSON.parse(dataAttr.communitiesRolesCanInvite);
 const permissions = JSON.parse(dataAttr.permissions);
+
+const appName = "InvenioCommunities.InvitationsSearch";
 
 const communityGroupsEnabled = JSON.parse(dataAttr.communityGroupsEnabled);
 
@@ -48,6 +45,7 @@ const InvitationsSearchLayoutWithConfig = parametrize(InvitationsSearchLayout, {
   community: community,
   permissions: permissions,
   communityGroupsEnabled: communityGroupsEnabled,
+  appName: appName,
 });
 
 const InvitationsContextProvider = parametrize(ContextProvider, {
@@ -55,25 +53,27 @@ const InvitationsContextProvider = parametrize(ContextProvider, {
 });
 
 const defaultComponents = {
-  "ResultsList.item": InvitationResultItemWithConfig,
-  "SearchApp.layout": InvitationsSearchLayoutWithConfig,
-  "SearchBar.element": InvitationsSearchBarElement,
-  "SearchApp.results": InvitationsResults,
-  "ResultsList.container": InvitationsResultsContainer,
-  "Sort.element": DropdownSort,
-  "RequestStatus.layout.submitted": SubmitStatus,
-  "RequestStatus.layout.deleted": DeleteStatus,
-  "RequestStatus.layout.accepted": AcceptStatus,
-  "RequestStatus.layout.declined": DeclineStatus,
-  "RequestStatus.layout.cancelled": CancelStatus,
-  "RequestStatus.layout.expired": ExpireStatus,
+  [`${appName}.ResultsList.item`]: InvitationResultItemWithConfig,
+  [`${appName}.SearchApp.layout`]: InvitationsSearchLayoutWithConfig,
+  [`${appName}.SearchBar.element`]: InvitationsSearchBarElement,
+  [`${appName}.SearchApp.results`]: InvitationsResults,
+  [`${appName}.ResultsList.container`]: InvitationsResultsContainer,
+  [`${appName}.Sort.element`]: DropdownSort,
+  [`RequestStatus.layout.submitted`]: SubmitStatus,
+  [`RequestStatus.layout.deleted`]: DeleteStatus,
+  [`RequestStatus.layout.accepted`]: AcceptStatus,
+  [`RequestStatus.layout.declined`]: DeclineStatus,
+  [`RequestStatus.layout.cancelled`]: CancelStatus,
+  [`RequestStatus.layout.expired`]: ExpireStatus,
 };
+
+const overriddenComponents = overrideStore.getAll();
 
 // Auto-initialize search app
 createSearchAppInit(
-  defaultComponents,
+  { ...defaultComponents, ...overriddenComponents },
   true,
   "invenio-search-config",
-  false,
+  true,
   InvitationsContextProvider
 );

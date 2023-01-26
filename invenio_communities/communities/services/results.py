@@ -7,13 +7,14 @@
 
 """Result items for OAI-PMH services."""
 
-from invenio_records_resources.pagination import Pagination
-from invenio_records_resources.services.base.results import ServiceListResult
+from invenio_records_resources.services.records.results import (
+    FieldsResolver,
+    RecordItem,
+    RecordList,
+)
 
 
-# TODO: Move to invenio-records-resources together with OAISetList in
-#       invenio-rdm-records and import from there
-class BaseServiceListResult(ServiceListResult):
+class CommunityListResult(RecordList):
     """List of result items."""
 
     def __init__(
@@ -25,6 +26,8 @@ class BaseServiceListResult(ServiceListResult):
         links_tpl=None,
         links_item_tpl=None,
         schema=None,
+        expandable_fields=None,
+        expand=False,
     ):
         """Constructor.
 
@@ -40,6 +43,36 @@ class BaseServiceListResult(ServiceListResult):
         self._params = params
         self._links_tpl = links_tpl
         self._links_item_tpl = links_item_tpl
+        self._expand = expand
+
+    @property
+    def hits(self):
+        """Iterator over the hits."""
+        for hit in self._results:
+            # Load dump
+            record = self._service.record_cls.loads(hit.to_dict())
+
+            # TODO better handling of featured field
+            record["featured"] = True if hit.featured["past"] else False
+
+            # Project the record
+            projection = self._schema.dump(
+                record,
+                context=dict(
+                    identity=self._identity,
+                    record=record,
+                ),
+            )
+            if self._links_item_tpl:
+                projection["links"] = self._links_item_tpl.expand(
+                    self._identity, record
+                )
+
+            yield projection
+
+
+class CommunityFeaturedList(CommunityListResult):
+    """List of featured community entry result items."""
 
     def __len__(self):
         """Return the total numer of hits."""
@@ -57,46 +90,39 @@ class BaseServiceListResult(ServiceListResult):
     @property
     def hits(self):
         """Iterator over the hits."""
-        for hit in self._results.items:
+        for record in self._results.items:
+
             # Project the record
             projection = self._schema.dump(
-                hit,
+                record,
                 context=dict(
                     identity=self._identity,
+                    record=record,
                 ),
             )
             if self._links_item_tpl:
-                projection["links"] = self._links_item_tpl.expand(hit)
+                projection["links"] = self._links_item_tpl.expand(
+                    self._identity, record
+                )
 
             yield projection
 
+
+class CommunityItem(RecordItem):
+    """Single request result."""
+
     @property
-    def pagination(self):
-        """Create a pagination object."""
-        return Pagination(
-            self._params["size"],
-            self._params["page"],
-            self.total,
-        )
+    def links(self):
+        """Get links for this result item."""
+        return self._links_tpl.expand(self._identity, self._record)
 
     def to_dict(self):
-        """Return result as a dictionary."""
-        # TODO: This part should imitate the result item above. I.e. add a
-        # "data" property which uses a ServiceSchema to dump the entire object.
-
-        res = {
-            "hits": {
-                "hits": list(self.hits),
-                "total": self.total,
-            }
-        }
-
-        if self._params:
-            if self._links_tpl:
-                res["links"] = self._links_tpl.expand(self.pagination)
-
+        """Get a dictionary for the request."""
+        res = self.data
+        if self._errors:
+            res["errors"] = self._errors
         return res
 
 
-class CommunityFeaturedList(BaseServiceListResult):
-    """List of featured community entry result items."""
+class FeaturedCommunityItem(CommunityItem):
+    """Single request result."""

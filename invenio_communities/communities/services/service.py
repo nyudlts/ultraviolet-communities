@@ -28,6 +28,7 @@ from marshmallow.exceptions import ValidationError
 from sqlalchemy.orm.exc import NoResultFound
 
 from invenio_communities.communities.records.models import CommunityFeatured
+from invenio_communities.communities.services.links import CommunityLinksTemplate
 from invenio_communities.communities.services.uow import (
     CommunityFeaturedCommitOp,
     CommunityFeaturedDeleteOp,
@@ -50,6 +51,18 @@ class CommunityService(RecordService):
         self._files = files_service
         self._invitations = invitations_service
         self._members = members_service
+
+    @property
+    def links_item_tpl(self):
+        """Item links template."""
+        return CommunityLinksTemplate(
+            self.config.links_item,
+            self.config.action_link,
+            self.config.available_actions,
+            context={
+                "permission_policy_cls": self.config.permission_policy_cls,
+            },
+        )
 
     @property
     def files(self):
@@ -213,7 +226,7 @@ class CommunityService(RecordService):
         if type(max_size) is int and max_size > 0:
             logo_size_limit = max_size
 
-        if content_length > logo_size_limit:
+        if content_length and content_length > logo_size_limit:
             raise LogoSizeLimitError(logo_size_limit, content_length)
 
         record.files["logo"] = stream
@@ -283,7 +296,6 @@ class CommunityService(RecordService):
             permission_action="featured_search",
             **kwargs
         ).execute()
-
         return self.result_list(
             self,
             identity,
@@ -312,6 +324,7 @@ class CommunityService(RecordService):
             self,
             identity,
             featured_entries,
+            links_tpl=LinksTemplate(self.config.links_featured_search),
             schema=self.schema_featured,
         )
 

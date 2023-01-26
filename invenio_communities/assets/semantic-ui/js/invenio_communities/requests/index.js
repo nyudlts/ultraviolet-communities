@@ -8,7 +8,7 @@
 
 import React from "react";
 import { createSearchAppInit } from "@js/invenio_search_ui";
-import { parametrize } from "react-overridable";
+import { parametrize, overrideStore } from "react-overridable";
 import {
   LabelTypeSubmission,
   LabelTypeInvitation,
@@ -28,10 +28,14 @@ import {
   RequestsSearchLayout,
 } from "./requests";
 import {
+  RequestAcceptModalTrigger,
+  RequestCancelModalTrigger,
+  RequestDeclineModalTrigger,
+} from "@js/invenio_requests/components/ModalTriggers";
+import {
   RequestAcceptButton,
   RequestCancelButton,
   RequestDeclineButton,
-  RequestCancelButtonModal,
 } from "@js/invenio_requests/components/Buttons";
 import {
   ContribSearchAppFacets,
@@ -40,6 +44,8 @@ import {
 } from "@js/invenio_search_ui/components";
 
 const domContainer = document.getElementById("communities-request-search-root");
+
+const appName = "InvenioCommunities.RequestSearch";
 
 const community = JSON.parse(domContainer.dataset.community);
 
@@ -56,31 +62,23 @@ const RequestsResultsItemTemplateWithCommunity = parametrize(
     community: community,
   }
 );
-const RequestAcceptButtonWithConfig = parametrize(RequestAcceptButton, {
+const RequestAcceptModalTriggerWithConfig = parametrize(RequestAcceptModalTrigger, {
   size: "mini",
   className: "ml-5",
 });
 
-const RequestDeclineButtonWithConfig = parametrize(RequestDeclineButton, {
+const RequestDeclineModalTriggerWithConfig = parametrize(RequestDeclineModalTrigger, {
   size: "mini",
   className: "ml-5",
 });
 
-const RequestCancelButtonWithConfig = parametrize(RequestCancelButton, {
+const RequestCancelModalTriggerWithConfig = parametrize(RequestCancelModalTrigger, {
   size: "mini",
   className: "ml-5",
 });
 
-const RequestAcceptButtonMobileWithConfig = parametrize(RequestAcceptButton, {
-  className: "fluid-responsive",
-});
-
-const RequestDeclineButtonMobileWithConfig = parametrize(RequestDeclineButton, {
-  className: "fluid-responsive",
-});
-
-const RequestCancelButtonMobileWithConfig = parametrize(RequestCancelButton, {
-  className: "fluid-responsive",
+const RequestsSearchLayoutWAppName = parametrize(RequestsSearchLayout, {
+  appName: appName,
 });
 
 const CommunitySubmission = () => (
@@ -104,39 +102,37 @@ const Cancelled = () => <LabelStatusCancel className="neutral" size="small" />;
 const Expired = () => <LabelStatusExpire className="expired" size="small" />;
 
 const defaultComponents = {
-  "BucketAggregation.element": ContribBucketAggregationElement,
-  "BucketAggregationValues.element": ContribBucketAggregationValuesElement,
-  "SearchApp.facets": ContribSearchAppFacets,
-  "ResultsList.item": RequestsResultsItemTemplateWithCommunity,
-  "ResultsGrid.item": RequestsResultsGridItemTemplateWithCommunity,
-  "SearchApp.layout": RequestsSearchLayout,
-  "SearchApp.results": RequestsResults,
-  "SearchBar.element": RecordSearchBarElement,
-  "EmptyResults.element": RequestsEmptyResultsWithState,
-  "RequestTypeLabel.layout.community-submission": CommunitySubmission,
-  "RequestTypeLabel.layout.community-invitation": CommunityInvitation,
-  "RequestStatusLabel.layout.submitted": Submitted,
-  "RequestStatusLabel.layout.deleted": Deleted,
-  "RequestStatusLabel.layout.accepted": Accepted,
-  "RequestStatusLabel.layout.declined": Declined,
-  "RequestStatusLabel.layout.cancelled": Cancelled,
-  "RequestStatusLabel.layout.expired": Expired,
-  "RequestActionModalTrigger.accept.computer-tablet":
-    RequestAcceptButtonWithConfig,
-  "RequestActionModalTrigger.decline.computer-tablet":
-    RequestDeclineButtonWithConfig,
-  "RequestActionModalTrigger.cancel.computer-tablet":
-    RequestCancelButtonWithConfig,
-  "RequestActionModalTrigger.accept.mobile":
-    RequestAcceptButtonMobileWithConfig,
-  "RequestActionModalTrigger.decline.mobile":
-    RequestDeclineButtonMobileWithConfig,
-  "RequestActionModalTrigger.cancel.mobile":
-    RequestCancelButtonMobileWithConfig,
-  "RequestActionButton.cancel": RequestCancelButtonModal,
-  "RequestActionButton.decline": RequestDeclineButton,
-  "RequestActionButton.accept": RequestAcceptButton,
+  [`${appName}.BucketAggregation.element`]: ContribBucketAggregationElement,
+  [`${appName}.BucketAggregationValues.element`]: ContribBucketAggregationValuesElement,
+  [`${appName}.SearchApp.facets`]: ContribSearchAppFacets,
+  [`${appName}.ResultsList.item`]: RequestsResultsItemTemplateWithCommunity,
+  [`${appName}.ResultsGrid.item`]: RequestsResultsGridItemTemplateWithCommunity,
+  [`${appName}.SearchApp.layout`]: RequestsSearchLayoutWAppName,
+  [`${appName}.SearchApp.results`]: RequestsResults,
+  [`${appName}.SearchBar.element`]: RecordSearchBarElement,
+  [`${appName}.EmptyResults.element`]: RequestsEmptyResultsWithState,
+  [`RequestTypeLabel.layout.community-submission`]: CommunitySubmission,
+  [`RequestTypeLabel.layout.community-invitation`]: CommunityInvitation,
+  [`RequestStatusLabel.layout.submitted`]: Submitted,
+  [`RequestStatusLabel.layout.deleted`]: Deleted,
+  [`RequestStatusLabel.layout.accepted`]: Accepted,
+  [`RequestStatusLabel.layout.declined`]: Declined,
+  [`RequestStatusLabel.layout.cancelled`]: Cancelled,
+  [`RequestStatusLabel.layout.expired`]: Expired,
+  [`RequestActionModalTrigger.accept`]: RequestAcceptModalTriggerWithConfig,
+  [`RequestActionModalTrigger.decline`]: RequestDeclineModalTriggerWithConfig,
+  [`RequestActionModalTrigger.cancel`]: RequestCancelModalTriggerWithConfig,
+  [`RequestActionButton.cancel`]: RequestCancelButton,
+  [`RequestActionButton.decline`]: RequestDeclineButton,
+  [`RequestActionButton.accept`]: RequestAcceptButton,
 };
 
+const overriddenComponents = overrideStore.getAll();
+
 // Auto-initialize search app
-createSearchAppInit(defaultComponents);
+createSearchAppInit(
+  { ...defaultComponents, ...overriddenComponents },
+  true,
+  "invenio-search-config",
+  true
+);
