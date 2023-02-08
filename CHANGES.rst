@@ -9,6 +9,34 @@
 Changes
 =======
 
+Version 4.1.1 (released 2023-01-26)
+-----------------------------------
+
+- assets: remove namespace from requests overridable ids
+
+Version 4.1.0 (released 2023-01-26)
+-----------------------------------
+
+- assets: normalise overridable ids
+
+Version 4.0.7 (released 2023-01-24)
+-----------------------------------
+
+- featured: add feature flag for administration panel
+
+
+Version 4.0.6 (released 2023-01-20)
+-----------------------------------
+
+- featured: add tooltip to featured community schema field
+
+Version 4.0.5 (released 2023-01-05)
+-----------------------------------
+
+- featured: add overridable id to featured communities component
+- assets: refactor eslint warnings
+- community: details page styling adjustments
+
 Version 4.0.4 (released 2022-12-05)
 -----------------------------------
 
