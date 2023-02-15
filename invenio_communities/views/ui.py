@@ -103,11 +103,14 @@ def create_ui_blueprint(app):
     def register_menus():
         """Register community menu items."""
         item = current_menu.submenu("main.communities")
-        item.register(
-            "invenio_communities.communities_frontpage",
-            "Communities",
-            order=3,
-        )
+
+        # Removed communities from header
+
+        # item.register(
+        #     "invenio_communities.communities_frontpage",
+        #     "Communities",
+        #     order=3,
+        # )
 
         item = current_menu.submenu("plus.community").register(
             "invenio_communities.communities_new",
