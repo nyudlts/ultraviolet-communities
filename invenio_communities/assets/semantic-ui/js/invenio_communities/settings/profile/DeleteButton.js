@@ -22,6 +22,7 @@ export const DeleteButton = (props) => {
 
   const handleClose = () => {
     setModalOpen(false);
+    setLoading(false);
     openModalBtnRef?.current?.focus();
   };
 
@@ -43,7 +44,7 @@ export const DeleteButton = (props) => {
     if (modalOpen) cancelBtnRef?.current?.focus();
   }, [modalOpen, cancelBtnRef]);
 
-  const { label, confirmationMessage } = props;
+  const { label, confirmationMessage, id } = props;
 
   return (
     <>
@@ -59,7 +60,7 @@ export const DeleteButton = (props) => {
         aria-haspopup="dialog"
         aria-controls="warning-modal"
         aria-expanded={modalOpen}
-        id="delete-button"
+        id={id}
       >
         <Icon name="trash" />
         {label}
@@ -68,7 +69,7 @@ export const DeleteButton = (props) => {
       <Modal
         id="warning-modal"
         role="dialog"
-        aria-labelledby="delete-button"
+        aria-labelledby={id}
         open={modalOpen}
         onClose={handleClose}
         size="tiny"
@@ -98,4 +99,5 @@ DeleteButton.propTypes = {
   onError: PropTypes.func.isRequired,
   label: PropTypes.string.isRequired,
   confirmationMessage: PropTypes.string.isRequired,
+  id: PropTypes.string.isRequired,
 };

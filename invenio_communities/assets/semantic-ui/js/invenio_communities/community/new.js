@@ -41,6 +41,7 @@ const IdentifierField = ({ formConfig }) => {
   return (
     <TextField
       required
+      id="slug"
       label={
         <FieldLabel htmlFor="slug" icon="barcode" label={i18next.t("Identifier")} />
       }
@@ -102,7 +103,7 @@ class CommunityCreateForm extends Component {
   };
 
   render() {
-    const { formConfig } = this.props;
+    const { formConfig, canCreateRestricted } = this.props;
     const { error } = this.state;
 
     return (
@@ -127,7 +128,7 @@ class CommunityCreateForm extends Component {
             <Grid container centered>
               <Grid.Row>
                 <Grid.Column mobile={16} tablet={12} computer={8} textAlign="center">
-                  <Header className="mt-15" as="h2">
+                  <Header as="h1" className="rel-mt-2">
                     {i18next.t("Setup your new community")}
                   </Header>
                   <Divider />
@@ -137,6 +138,7 @@ class CommunityCreateForm extends Component {
                 <Grid.Column mobile={16} tablet={12} computer={8}>
                   <TextField
                     required
+                    id="metadata.title"
                     fluid
                     fieldPath="metadata.title"
                     // Prevent submitting before the value is updated:
@@ -155,32 +157,37 @@ class CommunityCreateForm extends Component {
                   {!_isEmpty(customFields.ui) && (
                     <CustomFields
                       config={customFields.ui}
-                      templateLoader={(widget) =>
-                        import(`@templates/custom_fields/${widget}.js`)
-                      }
+                      templateLoaders={[
+                        (widget) => import(`@templates/custom_fields/${widget}.js`),
+                        (widget) => import(`react-invenio-forms`),
+                      ]}
                       fieldPathPrefix="custom_fields"
                     />
                   )}
-                  <Header as="h3">{i18next.t("Community visibility")}</Header>
-                  {formConfig.access.visibility.map((item) => (
-                    <React.Fragment key={item.value}>
-                      <RadioField
-                        key={item.value}
-                        fieldPath="access.visibility"
-                        label={item.text}
-                        labelIcon={item.icon}
-                        checked={_get(values, "access.visibility") === item.value}
-                        value={item.value}
-                        onChange={({ event, data, formikProps }) => {
-                          formikProps.form.setFieldValue(
-                            "access.visibility",
-                            item.value
-                          );
-                        }}
-                      />
-                      <label className="helptext">{item.helpText}</label>
-                    </React.Fragment>
-                  ))}
+                  {canCreateRestricted && (
+                    <>
+                      <Header as="h3">{i18next.t("Community visibility")}</Header>
+                      {formConfig.access.visibility.map((item) => (
+                        <React.Fragment key={item.value}>
+                          <RadioField
+                            key={item.value}
+                            fieldPath="access.visibility"
+                            label={item.text}
+                            labelIcon={item.icon}
+                            checked={_get(values, "access.visibility") === item.value}
+                            value={item.value}
+                            onChange={({ event, data, formikProps }) => {
+                              formikProps.form.setFieldValue(
+                                "access.visibility",
+                                item.value
+                              );
+                            }}
+                          />
+                          <label className="helptext">{item.helpText}</label>
+                        </React.Fragment>
+                      ))}
+                    </>
+                  )}
                 </Grid.Column>
               </Grid.Row>
               <Grid.Row>
@@ -209,14 +216,20 @@ class CommunityCreateForm extends Component {
 
 CommunityCreateForm.propTypes = {
   formConfig: PropTypes.object.isRequired,
+  canCreateRestricted: PropTypes.bool.isRequired,
 };
 
 const domContainer = document.getElementById("app");
 const formConfig = JSON.parse(domContainer.dataset.formConfig);
 const customFields = JSON.parse(domContainer.dataset.customFields);
+const canCreateRestricted = JSON.parse(domContainer.dataset.canCreateRestricted);
 
 ReactDOM.render(
-  <CommunityCreateForm formConfig={formConfig} customFields={customFields} />,
+  <CommunityCreateForm
+    formConfig={formConfig}
+    customFields={customFields}
+    canCreateRestricted={canCreateRestricted}
+  />,
   domContainer
 );
 export default CommunityCreateForm;

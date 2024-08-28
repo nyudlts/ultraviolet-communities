@@ -7,11 +7,7 @@
 
 """Result items for OAI-PMH services."""
 
-from invenio_records_resources.services.records.results import (
-    FieldsResolver,
-    RecordItem,
-    RecordList,
-)
+from invenio_records_resources.services.records.results import RecordItem, RecordList
 
 
 class CommunityListResult(RecordList):
@@ -91,7 +87,6 @@ class CommunityFeaturedList(CommunityListResult):
     def hits(self):
         """Iterator over the hits."""
         for record in self._results.items:
-
             # Project the record
             projection = self._schema.dump(
                 record,
@@ -117,7 +112,7 @@ class CommunityItem(RecordItem):
         return self._links_tpl.expand(self._identity, self._record)
 
     def to_dict(self):
-        """Get a dictionary for the request."""
+        """Get a dictionary for the community."""
         res = self.data
         if self._errors:
             res["errors"] = self._errors

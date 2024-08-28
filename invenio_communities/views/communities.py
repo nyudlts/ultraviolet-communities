@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of Invenio.
-# Copyright (C) 2016-2021 CERN.
+# Copyright (C) 2016-2024 CERN.
+# Copyright (C) 2023 Graz University of Technology.
 #
 # Invenio is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
@@ -11,16 +12,22 @@
 from copy import deepcopy
 
 from flask import current_app, g, render_template
-from flask_babelex import lazy_gettext as _
+from flask.templating import _render
 from flask_login import login_required
+
 from flask_principal import Permission, RoleNeed
+
+from invenio_i18n import lazy_gettext as _
+
 from invenio_records_resources.services.errors import PermissionDeniedError
 from invenio_vocabularies.proxies import current_service as vocabulary_service
+from jinja2 import TemplateError
 
 from invenio_communities.proxies import current_communities
 
 from ..communities.resources.ui_schema import TypesSchema
 from .decorators import pass_community
+from .template_loader import CommunityThemeChoiceJinjaLoader
 
 admin_permission = Permission(RoleNeed("admin"))
 
@@ -40,6 +47,91 @@ VISIBILITY_FIELDS = [
         "helpText": _("Your community is restricted to users" " with access."),
     },
 ]
+
+MEMBERS_VISIBILITY_FIELDS = [
+    {
+        "text": "Public",
+        "value": "public",
+        "icon": "group",
+        "helpText": _(
+            "Members who have set their visibility to public are visible to anyone. "
+            "Members with hidden visibility are only visible to other members."
+        ),
+    },
+    {
+        "text": "Members-only",
+        "value": "restricted",
+        "icon": "lock",
+        "helpText": _(
+            "Members in your community are only visible to other members of the "
+            "community."
+        ),
+    },
+]
+
+
+REVIEW_POLICY_FIELDS = [
+    {
+        "text": "Review all submissions",
+        "value": "closed",
+        "icon": "lock",
+        "helpText": _("All submissions to the community must be reviewed."),
+    },
+    {
+        "text": "Allow curators, managers and owners to publish without review",
+        "value": "open",
+        "icon": "group",
+        "helpText": _(
+            "Submissions to the community by default requires review, but curators, managers and owners can publish directly without review."
+        ),
+    },
+]
+
+
+HEADER_PERMISSIONS = {
+    "read",
+    "update",
+    "search_requests",
+    "members_search_public",
+    "moderate",
+}
+
+PRIVATE_PERMISSIONS = HEADER_PERMISSIONS | {
+    "manage_access",
+    "rename",
+    "delete",
+}
+
+MEMBERS_PERMISSIONS = PRIVATE_PERMISSIONS | {
+    "members_search",
+    "members_manage",
+    "invite_owners",
+    "search_invites",
+}
+
+
+def render_community_theme_template(template_name_or_list, theme=None, **context):
+    """Render community theme."""
+    if theme and theme.get("enabled", False):
+        brand = theme.get("brand")
+        if isinstance(template_name_or_list, str):
+            loader = CommunityThemeChoiceJinjaLoader(brand)
+
+            community_theme_view_env = current_app.jinja_env.overlay(loader=loader)
+
+            template = community_theme_view_env.get_or_select_template(
+                template_name_or_list
+            )
+            app = current_app._get_current_object()
+            # not ideal using the private flask function
+            return _render(app, template, context)
+        else:
+            raise TemplateError("Themed template path should be of type str.")
+
+    else:
+        templates = template_name_or_list
+
+        return render_template(templates, **context)
 
 
 def _filter_roles(action, member_types, community_id, identity=None):
@@ -74,15 +166,19 @@ def _get_roles_can_invite(community_id):
 
 def communities_frontpage():
     """Communities index page."""
+    can_create = current_communities.service.check_permission(g.identity, "create")
     return render_template(
         "invenio_communities/frontpage.html",
+        permissions=dict(can_create=can_create),
     )
 
 
 def communities_search():
     """Communities search page."""
+    can_create = current_communities.service.check_permission(g.identity, "create")
     return render_template(
         "invenio_communities/search.html",
+        permissions=dict(can_create=can_create),
     )
 
 
@@ -131,24 +227,33 @@ def load_custom_fields(dump_only_required=False):
 @admin_permission.require(http_exception=403)
 def communities_new():
     """Communities creation page."""
+    can_create = current_communities.service.check_permission(g.identity, "create")
+    if not can_create:
+        raise PermissionDeniedError()
+
+    can_create_restricted = current_communities.service.check_permission(
+        g.identity, "create_restricted"
+    )
+
     return render_template(
         "invenio_communities/new.html",
         form_config=dict(
-            access=dict(visibility=VISIBILITY_FIELDS),
+            access=dict(
+                visibility=VISIBILITY_FIELDS,
+            ),
             SITE_UI_URL=current_app.config["SITE_UI_URL"],
         ),
         custom_fields=load_custom_fields(
             dump_only_required=True,
         ),
+        can_create_restricted=can_create_restricted,
     )
 
 
 @pass_community(serialize=True)
 def communities_settings(pid_value, community, community_ui):
     """Community settings/profile page."""
-    permissions = community.has_permissions_to(
-        ["update", "read", "search_requests", "search_invites"]
-    )
+    permissions = community.has_permissions_to(PRIVATE_PERMISSIONS)
     if not permissions["can_update"]:
         raise PermissionDeniedError()
 
@@ -170,12 +275,14 @@ def communities_settings(pid_value, community, community_ui):
 
     logo_size_limit = 10**6
     max_size = current_app.config["COMMUNITIES_LOGO_MAX_FILE_SIZE"]
-    if type(max_size) is int and max_size > 0:
+    if isinstance(max_size, int) and max_size > 0:
         logo_size_limit = max_size
 
-    return render_template(
+    return render_community_theme_template(
         "invenio_communities/details/settings/profile.html",
-        community=community_ui,
+        theme=community_ui.get("theme", {}),
+        community=community,
+        community_ui=community_ui,
         has_logo=True if logo else False,
         logo_quota=logo_size_limit,
         types=types_serialized["types"],
@@ -188,14 +295,13 @@ def communities_settings(pid_value, community, community_ui):
 @pass_community(serialize=True)
 def communities_requests(pid_value, community, community_ui):
     """Community requests page."""
-    permissions = community.has_permissions_to(
-        ["update", "read", "search_requests", "search_invites"]
-    )
+    permissions = community.has_permissions_to(PRIVATE_PERMISSIONS)
     if not permissions["can_search_requests"]:
         raise PermissionDeniedError()
 
-    return render_template(
+    return render_community_theme_template(
         "invenio_communities/details/requests/index.html",
+        theme=community_ui.get("theme", {}),
         community=community_ui,
         permissions=permissions,
     )
@@ -204,65 +310,136 @@ def communities_requests(pid_value, community, community_ui):
 @pass_community(serialize=True)
 def communities_settings_privileges(pid_value, community, community_ui):
     """Community settings/privileges page."""
-    permissions = community.has_permissions_to(
-        ["update", "read", "search_requests", "search_invites"]
-    )
-    if not permissions["can_update"]:
+    permissions = community.has_permissions_to(PRIVATE_PERMISSIONS)
+    if not permissions["can_manage_access"]:
         raise PermissionDeniedError()
 
-    return render_template(
+    return render_community_theme_template(
         "invenio_communities/details/settings/privileges.html",
+        theme=community_ui.get("theme", {}),
         community=community_ui,
         form_config=dict(
-            access=dict(visibility=VISIBILITY_FIELDS),
+            access=dict(
+                visibility=VISIBILITY_FIELDS,
+                members_visibility=MEMBERS_VISIBILITY_FIELDS,
+            ),
         ),
         permissions=permissions,
     )
 
 
 @pass_community(serialize=True)
-def members(pid_value, community, community_ui):
-    """Community members page."""
-    permissions = community.has_permissions_to(
-        [
-            "update",
-            "members_search",
-            "members_search_public",
-            "members_manage",
-            "read",
-            "search_requests",
-            "search_invites",
-            "invite_owners",
-        ]
-    )
-    if not permissions["can_read"]:
+def communities_settings_curation_policy(pid_value, community, community_ui):
+    """Community settings/curation-policy page."""
+    permissions = community.has_permissions_to(PRIVATE_PERMISSIONS)
+    if not permissions["can_update"]:
         raise PermissionDeniedError()
 
-    return render_template(
+    return render_community_theme_template(
+        "invenio_communities/details/settings/curation_policy.html",
+        theme=community_ui.get("theme", {}),
+        community=community_ui,
+        permissions=permissions,
+        form_config=dict(
+            access=dict(review_policy=REVIEW_POLICY_FIELDS),
+        ),
+    )
+
+
+@pass_community(serialize=True)
+def communities_settings_pages(pid_value, community, community_ui):
+    """Community settings/curation-policy page."""
+    permissions = community.has_permissions_to(PRIVATE_PERMISSIONS)
+    if not permissions["can_update"]:
+        raise PermissionDeniedError()
+
+    return render_community_theme_template(
+        "invenio_communities/details/settings/pages.html",
+        theme=community_ui.get("theme", {}),
+        community=community_ui,
+        permissions=permissions,
+        form_config=dict(
+            access=dict(review_policy=REVIEW_POLICY_FIELDS),
+        ),
+    )
+
+
+@pass_community(serialize=True)
+def members(pid_value, community, community_ui):
+    """Community members page."""
+    permissions = community.has_permissions_to(MEMBERS_PERMISSIONS)
+    if not permissions["can_members_search_public"]:
+        raise PermissionDeniedError()
+
+    return render_community_theme_template(
         "invenio_communities/details/members/members.html",
+        theme=community_ui.get("theme", {}),
         community=community_ui,
         permissions=permissions,
         roles_can_update=_get_roles_can_update(community.id),
+        roles_can_invite=_get_roles_can_invite(community.id),
     )
 
 
 @pass_community(serialize=True)
 def invitations(pid_value, community, community_ui):
     """Community invitations page."""
-    permissions = community.has_permissions_to(
-        [
-            "update",
-            "read",
-            "search_requests",
-            "search_invites",
-            "invite_owners",
-        ]
-    )
+    permissions = community.has_permissions_to(MEMBERS_PERMISSIONS)
     if not permissions["can_search_invites"]:
         raise PermissionDeniedError()
-    return render_template(
+    return render_community_theme_template(
         "invenio_communities/details/members/invitations.html",
+        theme=community_ui.get("theme", {}),
         community=community_ui,
         roles_can_invite=_get_roles_can_invite(community.id),
         permissions=permissions,
+    )
+
+
+@pass_community(serialize=True)
+def communities_about(pid_value, community, community_ui):
+    """Community about page."""
+    permissions = community.has_permissions_to(HEADER_PERMISSIONS)
+    if not permissions["can_read"]:
+        raise PermissionDeniedError()
+
+    return render_community_theme_template(
+        "invenio_communities/details/about/index.html",
+        theme=community_ui.get("theme", {}),
+        community=community_ui,
+        permissions=permissions,
+        custom_fields_ui=load_custom_fields(dump_only_required=False)["ui"],
+    )
+
+
+@pass_community(serialize=True)
+def communities_curation_policy(pid_value, community, community_ui):
+    """Community curation policy page."""
+    permissions = community.has_permissions_to(HEADER_PERMISSIONS)
+    if not permissions["can_read"]:
+        raise PermissionDeniedError()
+    return render_community_theme_template(
+        "invenio_communities/details/curation_policy/index.html",
+        theme=community_ui.get("theme", {}),
+        community=community_ui,
+        permissions=permissions,
+    )
+
+
+@pass_community(serialize=False)
+def community_theme_css_config(pid_value, revision, community):
+    """Community brand theme view to serve css config."""
+    theme_config = community.data.get("theme", {}).get("style")
+
+    if theme_config is None:
+        template = ""
+    else:
+        template = render_template(
+            "invenio_communities/community_theme_template.css", theme=theme_config
+        )
+
+    return (
+        template,
+        200,
+        {"Cache-control": "max-age 1 year", "Content-Type": "text/css; charset=utf-8"},
     )

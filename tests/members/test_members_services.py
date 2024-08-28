@@ -1,24 +1,35 @@
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2022 Northwestern University.
-# Copyright (C) 2022 CERN.
-# Copyright (C) 2022 Graz University of Technology.
+# Copyright (C) 2022-2024 CERN.
+# Copyright (C) 2022-2023 Graz University of Technology.
 #
 # Invenio-Communities is free software; you can redistribute it and/or modify
 # it under the terms of the MIT License; see LICENSE file for more details.
 
 """Test community member service."""
 
+from unittest.mock import MagicMock
+
 import pytest
 from invenio_access.permissions import system_identity
 from invenio_accounts.proxies import current_datastore
 from invenio_cache import current_cache
+from invenio_notifications.proxies import current_notifications_manager
 from invenio_records_resources.services.errors import PermissionDeniedError
 from invenio_requests.records.api import RequestEvent
 from marshmallow import ValidationError
 
 from invenio_communities.members.errors import AlreadyMemberError, InvalidMemberError
 from invenio_communities.members.records.api import ArchivedInvitation, Member
+from invenio_communities.notifications.builders import (
+    CommunityInvitationAcceptNotificationBuilder,
+    CommunityInvitationCancelNotificationBuilder,
+    CommunityInvitationDeclineNotificationBuilder,
+    CommunityInvitationExpireNotificationBuilder,
+    CommunityInvitationSubmittedNotificationBuilder,
+)
+from invenio_communities.proxies import current_identities_cache
 
 
 #
@@ -127,9 +138,9 @@ def test_add_visible_property(member_service, community, owner, new_user, db):
 def test_add_invalid_data(member_service, community, owner, group, db):
     """Test various forms of invalid data."""
     # Invalid group id
-    data = {"members": [{"type": "group", "id": "invalid"}], "role": "reader"}
+    data = {"members": [{"type": "group", "id": 123}], "role": "reader"}
     assert pytest.raises(
-        InvalidMemberError,
+        ValidationError,
         member_service.add,
         owner.identity,
         community._record.id,
@@ -294,17 +305,18 @@ def test_invite_view_request(
         type="community-invitation",
     ).to_dict()
     assert res["hits"]["total"] == 1
+    request = res["hits"]["hits"][0]
+    assert 'You will join as "Reader"' in request["description"]
 
     # check request comment since invite user has a message
     RequestEvent.index.refresh()
     res = events_service.search(
         invite_user.identity,
-        request_id=res["hits"]["hits"][0]["id"],
+        request_id=request["id"],
     ).to_dict()
     hits = res["hits"]
-    assert hits["total"] == 2  # role + invitation
-    assert hits["hits"][0]["payload"]["content"] == 'You will join as "Reader".'
-    assert hits["hits"][1]["payload"]["content"] == "Welcome to the club!"
+    assert hits["total"] == 1
+    assert hits["hits"][0]["payload"]["content"] == "Welcome to the club!"
 
 
 #
@@ -321,13 +333,28 @@ def test_search_members(
     res = member_service.search(
         owner.identity, community._record.id, q=f"affiliation:CERN"
     )
-    assert res.to_dict()["hits"]["total"] == 1
+    assert res.to_dict()["hits"]["total"] == 2
     res = member_service.search(owner.identity, community._record.id, q=f"name:New")
     assert res.to_dict()["hits"]["total"] == 1
     res = member_service.search(
         owner.identity, community._record.id, q=f"email:newuser@newuser.org"
     )
     assert res.to_dict()["hits"]["total"] == 1
+
+
+#
+# Scan members
+#
+def test_scan_members(member_service, community, owner, clean_index):
+    """Scan should work the same as search."""
+    res_search = member_service.search(owner.identity, community._record.id)
+
+    # scan members (pagination not possible with scan)
+    res_scan = member_service.scan(owner.identity, community._record.id)
+    scan_hits = res_scan.to_dict()["hits"]["hits"]
+    assert len(scan_hits) == res_search.total
+    for index, hit in enumerate(res_search.to_dict()["hits"]["hits"]):
+        assert scan_hits[index] == hit
 
 
 def test_search_public_members(
@@ -353,7 +380,7 @@ def test_search_public_members(
     assert res.to_dict()["hits"]["total"] == 0
     # should get hits if using private search
     res = member_service.search(
-        owner.identity, community._record.id, q=f"newuser@newuser.org"
+        owner.identity, community._record.id, q="newuser@newuser.org"
     )
     assert res.to_dict()["hits"]["total"] == 1
 
@@ -363,6 +390,22 @@ def test_search_members_restricted(
 ):
     """Restricted communities can only be searched by members."""
     c = restricted_community
+
+    # Members can see all other members.
+    res = member_service.search(owner.identity, c._record.id)
+    assert res.to_dict()["hits"]["total"] == 1
+
+    # Anyone get permission denied.
+    pytest.raises(
+        PermissionDeniedError, member_service.search_public, anon_identity, c._record.id
+    )
+
+
+def test_search_members_visibility_restricted(
+    member_service, restricted_members_community, owner, anon_identity, clean_index
+):
+    """Restricted members communities can only be searched by members."""
+    c = restricted_members_community
 
     # Members can see all other members.
     res = member_service.search(owner.identity, c._record.id)
@@ -395,6 +438,31 @@ def test_search_members_restricted_as_group(
     admin.refresh()
     res = member_service.search(admin.identity, restricted_community._record.id)
     assert res.total == 2
+
+
+def test_read_memberships(
+    member_service,
+    community,
+    any_user,
+    anon_identity,
+    db,
+    clean_index,
+):
+    # empty at first for both authenticated and anonymous user
+    assert member_service.read_memberships(any_user.identity) == {"memberships": []}
+    assert member_service.read_memberships(anon_identity) == {"memberships": []}
+    # add membership
+    data = {
+        "members": [{"type": "user", "id": str(any_user.id)}],
+        "role": "reader",
+    }
+    member_service.add(system_identity, community._record.id, data)
+    any_user.refresh()
+    assert member_service.read_memberships(any_user.identity) == {
+        "memberships": [(str(community._record.id), "reader")]
+    }
+    # still empty for the anonynous user
+    assert member_service.read_memberships(anon_identity) == {"memberships": []}
 
 
 #
@@ -506,7 +574,13 @@ def test_invite_cancel_flow(
 
 
 def test_invite_actions_permissions(
-    requests_service, owner, any_user, members, invite_user, invite_request_id, db
+    db,
+    requests_service,
+    owner,
+    any_user,
+    members,
+    invite_user,
+    invite_request_id,
 ):
     """Actions should be protected."""
     manager = members["manager"]
@@ -564,8 +638,12 @@ def test_leave_single_owner_denied(member_service, community, owner):
     )
 
 
-def test_leave_denied(member_service, community, any_user, invite_user):
+def test_leave_denied(db, member_service, community, any_user, invite_user):
     """No permission for others"""
+    # some test is not undoing membership correctly
+    # FIXME when https://github.com/inveniosoftware/pytest-invenio/issues/30
+    current_identities_cache.flush()
+    any_user.refresh()
     data = {"members": [{"type": "user", "id": str(any_user.id)}]}
     pytest.raises(
         PermissionDeniedError,
@@ -702,7 +780,7 @@ def test_delete_invalid_member(member_service, community, owner):
 #
 # Update self
 #
-def test_selfupdate_denied(member_service, community, any_user, new_user):
+def test_selfupdate_denied(db, member_service, community, any_user, new_user):
     data = {
         "members": [{"type": "user", "id": str(new_user.id)}],
         "visible": False,
@@ -1115,3 +1193,310 @@ def test_relation_update_propagation(
 
     member = list(comm_members.hits)[0]
     assert member.get("member").get("name") == "Update test"
+
+
+#
+# invenio-notification testcases
+#
+def test_community_invitation_submit_notification(
+    member_service, requests_service, community, owner, new_user, db, monkeypatch, app
+):
+    """Test notifcation being built on community invitation submit."""
+
+    original_builder = CommunityInvitationSubmittedNotificationBuilder
+
+    # mock build to observe calls
+    mock_build = MagicMock()
+    mock_build.side_effect = original_builder.build
+    monkeypatch.setattr(original_builder, "build", mock_build)
+    # setting specific builder for test case
+    monkeypatch.setattr(
+        current_notifications_manager,
+        "builders",
+        {
+            **current_notifications_manager.builders,
+            original_builder.type: original_builder,
+        },
+    )
+    assert not mock_build.called
+
+    mail = app.extensions.get("mail")
+    assert mail
+
+    with mail.record_messages() as outbox:
+        # Validate that email was sent
+        role = "reader"
+        message = "<p>invitation message</p>"
+
+        data = {
+            "members": [{"type": "user", "id": str(new_user.id)}],
+            "role": role,
+            "message": message,
+        }
+        member_service.invite(owner.identity, community.id, data)
+        # ensure that the invited user request has been indexed
+        res = member_service.search_invitations(owner.identity, community.id).to_dict()
+        assert res["hits"]["total"] == 1
+        inv = res["hits"]["hits"][0]
+
+        # check notification is build on submit
+        assert mock_build.called
+        assert len(outbox) == 1
+        html = outbox[0].html
+        # TODO: update to `req["links"]["self_html"]` when addressing https://github.com/inveniosoftware/invenio-rdm-records/issues/1327
+        assert "/me/requests/{}".format(inv["request"]["id"]) in html
+        # role titles will be capitalized
+        assert role.capitalize() in html
+        assert "You have been invited to join" in html
+        assert message in html
+        assert community["metadata"]["title"] in html
+
+    # decline to reset
+    requests_service.execute_action(new_user.identity, inv["request"]["id"], "decline")
+    with mail.record_messages() as outbox:
+        data = {
+            "members": [{"type": "user", "id": str(new_user.id)}],
+            "role": role,
+        }
+        # invite again without message
+        member_service.invite(owner.identity, community.id, data)
+        # ensure that the invited user request has been indexed
+        res = member_service.search_invitations(owner.identity, community.id).to_dict()
+        assert res["hits"]["total"] == 2
+        inv = res["hits"]["hits"][1]
+
+        # check notification is build on submit
+        assert mock_build.called
+        assert len(outbox) == 1
+        html = outbox[0].html
+        # TODO: update to `req["links"]["self_html"]` when addressing https://github.com/inveniosoftware/invenio-rdm-records/issues/1327
+        assert "/me/requests/{}".format(inv["request"]["id"]) in html
+        # role titles will be capitalized
+        assert role.capitalize() in html
+        assert "You have been invited to join" in html
+        assert "with the following message:" not in html
+        assert community["metadata"]["title"] in html
+
+
+def test_community_invitation_accept_notification(
+    member_service,
+    requests_service,
+    community,
+    new_user,
+    db,
+    monkeypatch,
+    app,
+    members,
+    clean_index,
+):
+    """Test notifcation sent on community invitation accept."""
+
+    original_builder = CommunityInvitationAcceptNotificationBuilder
+
+    owner = members["owner"]
+    # mock build to observe calls
+    mock_build = MagicMock()
+    mock_build.side_effect = original_builder.build
+    monkeypatch.setattr(original_builder, "build", mock_build)
+    assert not mock_build.called
+
+    mail = app.extensions.get("mail")
+    assert mail
+
+    role = "reader"
+    data = {
+        "members": [{"type": "user", "id": str(new_user.id)}],
+        "role": role,
+    }
+    member_service.invite(owner.identity, community.id, data)
+    res = member_service.search_invitations(owner.identity, community.id).to_dict()
+    assert res["hits"]["total"] == 1
+    inv = res["hits"]["hits"][0]
+    with mail.record_messages() as outbox:
+        # Validate that email was sent
+        requests_service.execute_action(
+            new_user.identity, inv["request"]["id"], "accept"
+        )
+        # check notification is build on submit
+        assert mock_build.called
+        # community owner, manager get notified
+        assert len(outbox) == 2
+        html = outbox[0].html
+        # TODO: update to `req["links"]["self_html"]` when addressing https://github.com/inveniosoftware/invenio-rdm-records/issues/1327
+        assert "/me/requests/{}".format(inv["request"]["id"]) in html
+        # role titles will be capitalized
+        assert (
+            "'@{who}' accepted the invitation to join your community '{title}'".format(
+                who=new_user.user.username
+                or new_user.user.user_profile.get("full_name"),
+                title=community["metadata"]["title"],
+            )
+            in html
+        )
+
+
+def test_community_invitation_cancel_notification(
+    member_service,
+    requests_service,
+    community,
+    owner,
+    new_user,
+    db,
+    monkeypatch,
+    app,
+    clean_index,
+):
+    """Test notifcation sent on community invitation cancel."""
+
+    original_builder = CommunityInvitationCancelNotificationBuilder
+
+    # mock build to observe calls
+    mock_build = MagicMock()
+    mock_build.side_effect = original_builder.build
+    monkeypatch.setattr(original_builder, "build", mock_build)
+    assert not mock_build.called
+
+    mail = app.extensions.get("mail")
+    assert mail
+
+    role = "reader"
+    data = {
+        "members": [{"type": "user", "id": str(new_user.id)}],
+        "role": role,
+    }
+
+    member_service.invite(owner.identity, community.id, data)
+    res = member_service.search_invitations(owner.identity, community.id).to_dict()
+    assert res["hits"]["total"] == 1
+    inv = res["hits"]["hits"][0]
+    with mail.record_messages() as outbox:
+        # Validate that email was sent
+        requests_service.execute_action(owner.identity, inv["request"]["id"], "cancel")
+        # check notification is build on submit
+        assert mock_build.called
+        # invited user gets notified
+        assert len(outbox) == 1
+        html = outbox[0].html
+        # TODO: update to `req["links"]["self_html"]` when addressing https://github.com/inveniosoftware/invenio-rdm-records/issues/1327
+        assert "/me/requests/{}".format(inv["request"]["id"]) in html
+        # role titles will be capitalized
+        assert (
+            "The invitation for '@{who}' to join community '{title}' was cancelled".format(
+                who=new_user.user.username
+                or new_user.user.user_profile.get("full_name"),
+                title=community["metadata"]["title"],
+            )
+            in html
+        )
+
+
+def test_community_invitation_decline_notification(
+    member_service,
+    requests_service,
+    community,
+    new_user,
+    db,
+    monkeypatch,
+    app,
+    members,
+    clean_index,
+):
+    """Test notifcation sent on community invitation decline."""
+
+    owner = members["owner"]
+    original_builder = CommunityInvitationDeclineNotificationBuilder
+
+    # mock build to observe calls
+    mock_build = MagicMock()
+    mock_build.side_effect = original_builder.build
+    monkeypatch.setattr(original_builder, "build", mock_build)
+    assert not mock_build.called
+
+    mail = app.extensions.get("mail")
+    assert mail
+
+    role = "reader"
+    data = {
+        "members": [{"type": "user", "id": str(new_user.id)}],
+        "role": role,
+    }
+    member_service.invite(owner.identity, community.id, data)
+    res = member_service.search_invitations(owner.identity, community.id).to_dict()
+    assert res["hits"]["total"] == 1
+    inv = res["hits"]["hits"][0]
+    with mail.record_messages() as outbox:
+        # Validate that email was sent
+        requests_service.execute_action(
+            new_user.identity, inv["request"]["id"], "decline"
+        )
+        # check notification is build on submit
+        assert mock_build.called
+        # community owner, manager get notified
+        assert len(outbox) == 2
+        html = outbox[0].html
+        # TODO: update to `req["links"]["self_html"]` when addressing https://github.com/inveniosoftware/invenio-rdm-records/issues/1327
+        assert "/me/requests/{}".format(inv["request"]["id"]) in html
+        # role titles will be capitalized
+        assert (
+            "'@{who}' declined the invitation to join your community '{title}'".format(
+                who=new_user.user.username
+                or new_user.user.user_profile.get("full_name"),
+                title=community["metadata"]["title"],
+            )
+            in html
+        )
+
+
+def test_community_invitation_expire_notification(
+    member_service,
+    requests_service,
+    community,
+    new_user,
+    db,
+    monkeypatch,
+    app,
+    members,
+    clean_index,
+):
+    """Test notifcation sent on community invitation decline."""
+
+    owner = members["owner"]
+    original_builder = CommunityInvitationExpireNotificationBuilder
+
+    # mock build to observe calls
+    mock_build = MagicMock()
+    mock_build.side_effect = original_builder.build
+    monkeypatch.setattr(original_builder, "build", mock_build)
+    assert not mock_build.called
+
+    mail = app.extensions.get("mail")
+    assert mail
+
+    role = "reader"
+    data = {
+        "members": [{"type": "user", "id": str(new_user.id)}],
+        "role": role,
+    }
+    member_service.invite(owner.identity, community.id, data)
+    res = member_service.search_invitations(owner.identity, community.id).to_dict()
+    assert res["hits"]["total"] == 1
+    inv = res["hits"]["hits"][0]
+    with mail.record_messages() as outbox:
+        # Validate that email was sent
+        requests_service.execute_action(system_identity, inv["request"]["id"], "expire")
+        # check notification is build on submit
+        assert mock_build.called
+        # community owner, manager and invited user get notified
+        assert len(outbox) == 3
+        html = outbox[0].html
+        # TODO: update to `req["links"]["self_html"]` when addressing https://github.com/inveniosoftware/invenio-rdm-records/issues/1327
+        assert "/me/requests/{}".format(inv["request"]["id"]) in html
+        # role titles will be capitalized
+        assert (
+            "The invitation for '@{who}' to join community '{title}' has expired.".format(
+                who=new_user.user.username
+                or new_user.user.user_profile.get("full_name"),
+                title=community["metadata"]["title"],
+            )
+            in html
+        )

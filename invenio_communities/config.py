@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of Invenio.
-# Copyright (C) 2016-2022 CERN.
+# Copyright (C) 2016-2024 CERN.
+# Copyright (C) 2023 Graz University of Technology.
+# Copyright (C) 2023 KTH Royal Institute of Technology.
 #
 # Invenio is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
@@ -10,7 +12,7 @@
 
 from datetime import timedelta
 
-from flask_babelex import lazy_gettext as _
+from invenio_i18n import lazy_gettext as _
 
 from invenio_communities.communities.services import facets
 
@@ -18,18 +20,19 @@ COMMUNITIES_ROUTES = {
     "frontpage": "/communities",
     "search": "/communities/search",
     "new": "/communities/new",
-    "details": "/communities/<pid_value>",
+    "upload": "/communities/<pid_value>/upload",
     "settings": "/communities/<pid_value>/settings",
     "requests": "/communities/<pid_value>/requests",
     "settings_privileges": "/communities/<pid_value>/settings/privileges",
+    "settings_curation_policy": "/communities/<pid_value>/settings/curation-policy",
+    "settings_pages": "/communities/<pid_value>/settings/pages",
     "members": "/communities/<pid_value>/members",
     "invitations": "/communities/<pid_value>/invitations",
+    "about": "/communities/<pid_value>/about",
+    "curation_policy": "/communities/<pid_value>/curation-policy",
 }
 
 """Communities ui endpoints."""
-
-COMMUNITIES_GROUPS_ENABLED = True
-"""Config to allow invitation of groups."""
 
 COMMUNITIES_FACETS = {
     "type": {
@@ -119,6 +122,9 @@ COMMUNITIES_SEARCH = {
     "sort": ["bestmatch", "newest", "oldest"],
 }
 """Community search configuration (i.e list of communities)"""
+
+COMMUNITIES_SEARCH_SORT_BY_VERIFIED = False
+"""Sort communities by 'verified' first."""
 
 COMMUNITIES_REQUESTS_SEARCH = {
     "facets": ["type", "status"],
@@ -288,3 +294,22 @@ For example:
 
 # Preview: Feature flag for invenio-app-rdm v11
 COMMUNITIES_ADMINISTRATION_DISABLED = True
+
+COMMUNITIES_ALLOW_RESTRICTED = True
+
+# Cache duration
+# 60 seconds * 60 (1 hour) * 24 (1 day)
+COMMUNITIES_IDENTITIES_CACHE_TIME = 60 * 60 * 24
+
+# Redis URL Cache for identities
+COMMUNITIES_IDENTITIES_CACHE_REDIS_URL = "redis://localhost:6379/4"
+
+# Cache handler
+COMMUNITIES_IDENTITIES_CACHE_HANDLER = (
+    "invenio_communities.cache.redis:IdentityRedisCache"
+)
+
+COMMUNITIES_OAI_SETS_PREFIX = "community-"
+
+COMMUNITIES_ALWAYS_SHOW_CREATE_LINK = False
+"""Controls visibility of 'New Community' btn based on user's permission when set to True."""

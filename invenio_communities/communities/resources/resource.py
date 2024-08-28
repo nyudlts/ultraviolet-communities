@@ -41,11 +41,6 @@ class CommunityResource(RecordResource):
 
     def create_url_rules(self):
         """Create the URL rules for the record resource."""
-
-        def p(prefix, route):
-            """Prefix a route with the URL prefix."""
-            return f"{prefix}{route}"
-
         routes = self.config.routes
         return [
             route("GET", routes["list"], self.search),
@@ -64,6 +59,7 @@ class CommunityResource(RecordResource):
             route("PUT", routes["featured-item"], self.featured_update),
             route("DELETE", routes["featured-item"], self.featured_delete),
             route("GET", routes["community-requests"], self.search_community_requests),
+            route("POST", routes["restore-community"], self.restore_community),
         ]
 
     @request_search_args
@@ -139,6 +135,36 @@ class CommunityResource(RecordResource):
             resource_requestctx.data["request_stream"],
             content_length=resource_requestctx.data["request_content_length"],
         )
+        return item.to_dict(), 200
+
+    #
+    # Deletion workflows
+    #
+    @request_headers
+    @request_view_args
+    @request_data
+    def delete(self):
+        """Read the related review request."""
+        self.service.delete_community(
+            g.identity,
+            resource_requestctx.view_args["pid_value"],
+            resource_requestctx.data,
+            revision_id=resource_requestctx.headers.get("if_match"),
+        )
+
+        return "", 204
+
+    @request_headers
+    @request_view_args
+    @request_data
+    def restore_community(self):
+        """Read the related review request."""
+        item = self.service.restore_community(
+            g.identity,
+            resource_requestctx.view_args["pid_value"],
+            resource_requestctx.data,
+        )
+
         return item.to_dict(), 200
 
     @request_view_args

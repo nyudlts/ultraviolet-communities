@@ -18,15 +18,14 @@
 {% set active_community_header_menu_item = 'settings' %}
 
 {%- block settings_body %}
-<div class="sixteen wide mobile sixteen wide tablet thirteen wide computer column">
   <div
     id="app"
-    data-community='{{ community | tojson}}'
+    data-community='{{ community_ui | tojson }}'
     data-has-logo='{{ has_logo | tojson }}'
     data-types='{{ types | tojson }}'
     data-logo-max-size='{{ logo_quota | tojson }}'
     data-custom-fields='{{ custom_fields | tojson }}'
+    data-permissions='{{ permissions | tojson }}'
   >
   </div>
-</div>
 {%- endblock settings_body %}

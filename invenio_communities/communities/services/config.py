@@ -1,26 +1,24 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of Invenio.
-# Copyright (C) 2016-2022 CERN.
+# Copyright (C) 2016-2024 CERN.
 # Copyright (C) 2022 Northwestern University.
+# Copyright (C) 2023 Graz University of Technology.
 #
 # Invenio is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
 
 """Invenio Communities Service API config."""
 
-from flask_babelex import lazy_gettext as _
+from invenio_i18n import lazy_gettext as _
 from invenio_records_resources.services import FileServiceConfig
 from invenio_records_resources.services.base.config import (
     ConfiguratorMixin,
+    FromConfig,
     FromConfigSearchOptions,
     SearchOptionsMixin,
 )
 from invenio_records_resources.services.files.links import FileLink
-from invenio_records_resources.services.records.components import (
-    MetadataComponent,
-    RelationsComponent,
-)
 from invenio_records_resources.services.records.config import RecordServiceConfig
 from invenio_records_resources.services.records.config import (
     SearchOptions as SearchOptionsBase,
@@ -42,16 +40,10 @@ from invenio_communities.communities.services.results import (
 )
 
 from ...permissions import CommunityPermissionPolicy, can_perform_action
-from ..schema import CommunityFeaturedSchema, CommunitySchema
-from .components import (
-    CommunityAccessComponent,
-    CustomFieldsComponent,
-    FeaturedCommunityComponent,
-    OAISetComponent,
-    OwnershipComponent,
-    PIDComponent,
-)
+from ..schema import CommunityFeaturedSchema, CommunitySchema, TombstoneSchema
+from .components import DefaultCommunityComponents
 from .links import CommunityLink
+from .search_params import IncludeDeletedCommunitiesParam, StatusParam
 from .sort import CommunitiesSortParam
 
 
@@ -75,6 +67,8 @@ class SearchOptions(SearchOptionsBase, SearchOptionsMixin):
         PaginationParam,
         CommunitiesSortParam,
         FacetsParam,
+        StatusParam,
+        IncludeDeletedCommunitiesParam,
     ]
 
 
@@ -84,8 +78,9 @@ class CommunityServiceConfig(RecordServiceConfig, ConfiguratorMixin):
     service_id = "communities"
 
     # Common configuration
-    permission_policy_cls = CommunityPermissionPolicy
-
+    permission_policy_cls = FromConfig(
+        "COMMUNITIES_PERMISSION_POLICY", default=CommunityPermissionPolicy
+    )
     # Record specific configuration
     record_cls = Community
     result_item_cls = CommunityItem
@@ -103,6 +98,7 @@ class CommunityServiceConfig(RecordServiceConfig, ConfiguratorMixin):
     # Service schema
     schema = CommunitySchema
     schema_featured = CommunityFeaturedSchema
+    schema_tombstone = TombstoneSchema
 
     result_list_cls_featured = CommunityFeaturedList
     result_item_cls_featured = FeaturedCommunityItem
@@ -117,6 +113,7 @@ class CommunityServiceConfig(RecordServiceConfig, ConfiguratorMixin):
         "public_members": CommunityLink("{+api}/communities/{id}/members/public"),
         "invitations": CommunityLink("{+api}/communities/{id}/invitations"),
         "requests": CommunityLink("{+api}/communities/{id}/requests"),
+        "records": CommunityLink("{+api}/communities/{id}/records"),
     }
 
     action_link = CommunityLink(
@@ -135,24 +132,18 @@ class CommunityServiceConfig(RecordServiceConfig, ConfiguratorMixin):
     ]
 
     # Service components
-    components = [
-        MetadataComponent,
-        CustomFieldsComponent,
-        PIDComponent,
-        RelationsComponent,
-        CommunityAccessComponent,
-        OwnershipComponent,
-        FeaturedCommunityComponent,
-        OAISetComponent,
-    ]
+    components = FromConfig(
+        "COMMUNITIES_SERVICE_COMPONENTS", default=DefaultCommunityComponents
+    )
 
 
-class CommunityFileServiceConfig(FileServiceConfig):
+class CommunityFileServiceConfig(FileServiceConfig, ConfiguratorMixin):
     """Configuration for community files."""
 
     record_cls = Community
-    permission_policy_cls = CommunityPermissionPolicy
-
+    permission_policy_cls = FromConfig(
+        "COMMUNITIES_PERMISSION_POLICY", default=CommunityPermissionPolicy
+    )
     file_links_item = {
         "self": FileLink("{+api}/communities/{id}/logo"),
     }

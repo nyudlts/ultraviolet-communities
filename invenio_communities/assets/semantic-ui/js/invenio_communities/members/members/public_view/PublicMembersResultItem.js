@@ -22,18 +22,15 @@ class PublicMemberPublicViewResultItem extends Component {
                 <Item.Content className="ml-10">
                   <Item.Header className={!result.member.description ? "mt-5" : ""}>
                     <b>{result.member.name}</b>
-                    {result.member.is_group && (
+                    {result.member.type === "group" && (
                       <Label className="ml-10">{i18next.t("Group")}</Label>
                     )}
                   </Item.Header>
                   {result.member.description && (
                     <Item.Meta>
-                      <div
-                        className="truncate-lines-1"
-                        dangerouslySetInnerHTML={{
-                          __html: result.member.description,
-                        }}
-                      />
+                      <div className="truncate-lines-1">
+                        {result.member.description}
+                      </div>
                     </Item.Meta>
                   )}
                 </Item.Content>

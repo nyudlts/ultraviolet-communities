@@ -2,18 +2,20 @@
 #
 # Copyright (C) 2022 Northwestern University.
 # Copyright (C) 2022 CERN.
+# Copyright (C) 2023 Graz University of Technology.
 #
 # Invenio-Communities is free software; you can redistribute it and/or modify
 # it under the terms of the MIT License; see LICENSE file for more details.
 
 """Members Service Config."""
 
-from flask_babelex import lazy_gettext as _
+from invenio_i18n import lazy_gettext as _
 from invenio_records_resources.services import (
     RecordServiceConfig,
     SearchOptions,
     pagination_links,
 )
+from invenio_records_resources.services.base.config import ConfiguratorMixin, FromConfig
 from invenio_records_resources.services.records.components import MetadataComponent
 from invenio_records_resources.services.records.queryparser import (
     QueryParser,
@@ -53,16 +55,20 @@ class PublicSearchOptions(SearchOptions):
             "user.profile.full_name^3",
             "user.profile.affiliations",
         ],
-        tree_transformer_factory=SearchFieldTransformer.factory(
-            mapping={
-                "affiliation": "user.profile.affiliations",
-                "affiliations": "user.profile.affiliations",
-                "full_name": "user.profile.full_name",
-                "fullname": "user.profile.full_name",
-                "name": "user.profile.full_name",
-                "username": "user.username",
-            }
-        ),
+        allow_list=[  # present to restrict to mapped fields
+            "user.profile.affiliations",
+            "user.profile.full_name",
+            "user.username",
+        ],
+        mapping={
+            "affiliation": "user.profile.affiliations",
+            "affiliations": "user.profile.affiliations",
+            "full_name": "user.profile.full_name",
+            "fullname": "user.profile.full_name",
+            "name": "user.profile.full_name",
+            "username": "user.username",
+        },
+        tree_transformer_cls=SearchFieldTransformer,
     )
 
 
@@ -135,21 +141,26 @@ class MemberSearchOptions(PublicSearchOptions):
             "user.profile.full_name^3",
             "user.profile.affiliations",
         ],
-        tree_transformer_factory=SearchFieldTransformer.factory(
-            mapping={
-                "affiliation": "user.profile.affiliations",
-                "affiliations": "user.profile.affiliations",
-                "email": "user.email",
-                "full_name": "user.profile.full_name",
-                "fullname": "user.profile.full_name",
-                "name": "user.profile.full_name",
-                "username": "user.username",
-            }
-        ),
+        allow_list=[  # present to restrict to mapping
+            "user.profile.affiliations",
+            "user.profile.full_name",
+            "user.username",
+            "user.email",
+        ],
+        mapping={
+            "affiliation": "user.profile.affiliations",
+            "affiliations": "user.profile.affiliations",
+            "email": "user.email",
+            "full_name": "user.profile.full_name",
+            "fullname": "user.profile.full_name",
+            "name": "user.profile.full_name",
+            "username": "user.username",
+        },
+        tree_transformer_cls=SearchFieldTransformer,
     )
 
 
-class MemberServiceConfig(RecordServiceConfig):
+class MemberServiceConfig(RecordServiceConfig, ConfiguratorMixin):
     """Member Service Config."""
 
     service_id = "members"
@@ -164,8 +175,9 @@ class MemberServiceConfig(RecordServiceConfig):
     archive_indexer_cls = RecordServiceConfig.indexer_cls
     archive_indexer_queue_name = "archived-invitations"
 
-    permission_policy_cls = CommunityPermissionPolicy
-
+    permission_policy_cls = FromConfig(
+        "COMMUNITIES_PERMISSION_POLICY", default=CommunityPermissionPolicy
+    )
     search = MemberSearchOptions
     search_public = PublicSearchOptions
     search_invitations = InvitationsSearchOptions

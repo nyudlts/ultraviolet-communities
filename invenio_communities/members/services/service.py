@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2022 Northwestern University.
-# Copyright (C) 2022 CERN.
-# Copyright (C) 2022 Graz University of Technology.
+# Copyright (C) 2022-2024 CERN.
+# Copyright (C) 2022-2023 Graz University of Technology.
 #
 # Invenio-Communities is free software; you can redistribute it and/or modify
 # it under the terms of the MIT License; see LICENSE file for more details.
@@ -12,9 +12,10 @@
 from datetime import datetime, timezone
 
 from flask import current_app
-from flask_babelex import gettext as _
 from invenio_access.permissions import system_identity
 from invenio_accounts.models import Role
+from invenio_i18n import gettext as _
+from invenio_notifications.services.uow import NotificationOp
 from invenio_records_resources.services import LinksTemplate
 from invenio_records_resources.services.records import (
     RecordService,
@@ -35,6 +36,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import NoResultFound
 from werkzeug.local import LocalProxy
 
+from ...notifications.builders import CommunityInvitationSubmittedNotificationBuilder
 from ...proxies import current_roles
 from ..errors import AlreadyMemberError, InvalidMemberError
 from ..records.api import ArchivedInvitation
@@ -222,6 +224,7 @@ class MemberService(RecordService):
                 action,
                 identity,
                 record=m,
+                community=community,
                 errors=None,
                 uow=uow,
             )
@@ -241,15 +244,6 @@ class MemberService(RecordService):
         request_id=None,
     ):
         """Add a member to the community."""
-        # TODO: inefficient to do here, should be done in bulk instead.
-        if member["type"] == "group":
-            try:
-                # member['id'] is mapped from role.name
-                # (check invenio-users-resources)
-                member["id"] = Role.query.filter_by(name=member["id"]).one().id
-            except NoResultFound as e:
-                raise InvalidMemberError(member) from e
-
         member_arg = {member["type"] + "_id": member["id"]}
         try:
             # Integrity checks happens here which will validate:
@@ -284,10 +278,14 @@ class MemberService(RecordService):
             title = _('Invitation to join "{community}"').format(
                 community=community.metadata["title"],
             )
+            description = _('You will join as "{role}".').format(role=role.title)
 
             request_item = current_requests_service.create(
                 identity,
-                {"title": title},
+                {
+                    "title": title,
+                    "description": description,
+                },
                 CommunityInvitation,
                 {"user": member["id"]},
                 creator=community,
@@ -298,21 +296,28 @@ class MemberService(RecordService):
                 uow=uow,
             )
 
-            # add role as message
-            data = {
-                "payload": {
-                    "content": _('You will join as "{role}".').format(role=role.title),
-                }
-            }
-            current_events_service.create(
-                identity, request_item.id, data, CommentEventType, uow=uow
-            )
             # message was provided.
             if message:
                 data = {"payload": {"content": message}}
                 current_events_service.create(
-                    identity, request_item.id, data, CommentEventType, uow=uow
+                    identity,
+                    request_item.id,
+                    data,
+                    CommentEventType,
+                    uow=uow,
+                    notify=False,
                 )
+
+            uow.register(
+                NotificationOp(
+                    CommunityInvitationSubmittedNotificationBuilder.build(
+                        request=request_item._request,
+                        # explicit string conversion to get the value of LazyText
+                        role=str(role.title),
+                        message=message,
+                    )
+                )
+            )
 
             # Create an inactive member entry linked to the request.
             self._add_factory(
@@ -328,18 +333,57 @@ class MemberService(RecordService):
             )
 
     def search(
-        self, identity, community_id, params=None, search_preference=None, **kwargs
+        self,
+        identity,
+        community_id,
+        params=None,
+        search_preference=None,
+        extra_filter=None,
+        **kwargs
     ):
         """Search."""
+        # Apply extra filters
+        filter_ = dsl.Q("term", **{"active": True})
+        if extra_filter:
+            filter_ &= extra_filter
+
         return self._members_search(
             identity,
             community_id,
             "members_search",
             self.member_dump_schema,
             self.config.search,
-            extra_filter=dsl.Q("term", **{"active": True}),
+            extra_filter=filter_,
             params=params,
             search_preference=search_preference,
+            **kwargs
+        )
+
+    def scan(
+        self,
+        identity,
+        community_id,
+        params=None,
+        search_preference=None,
+        extra_filter=None,
+        **kwargs
+    ):
+        """Scan community members to retrieve all matching the query."""
+        # Apply extra filters
+        filter_ = dsl.Q("term", **{"active": True})
+        if extra_filter:
+            filter_ &= extra_filter
+
+        return self._members_search(
+            identity,
+            community_id,
+            "members_search",
+            self.member_dump_schema,
+            self.config.search,
+            extra_filter=filter_,
+            scan_params=params,
+            search_preference=search_preference,
+            scan=True,
             **kwargs
         )
 
@@ -349,9 +393,8 @@ class MemberService(RecordService):
         """Search public members matching the querystring."""
         # The search for members is split two methods (public, members) to
         # prevent leaking of information. E.g. the public serialization
-        # must now have all fields present.
-        # TODO: limit fields on which the query works on to avoid leaking
-        # information
+        # must not have all fields present.
+        # TODO: limit fields on which the query works on to avoid leaking information
         return self._members_search(
             identity,
             community_id,
@@ -396,6 +439,8 @@ class MemberService(RecordService):
         extra_filter=None,
         params=None,
         search_preference=None,
+        scan=False,
+        scan_params=None,
         **kwargs
     ):
         """Members search."""
@@ -409,6 +454,7 @@ class MemberService(RecordService):
 
         # Prepare and execute the search
         params = params or {}
+        scan_params = scan_params or {}
 
         search = self._search(
             "search_members",
@@ -420,22 +466,34 @@ class MemberService(RecordService):
             extra_filter=filter,
             **kwargs
         )
-        search_result = search.execute()
+        # scan has a default scroll timeout of 5 minutes
+        # https://github.com/opensearch-project/opensearch-py/blob/fe3b5a8922aa8eb04f735c74d127d7ea68a00bec/opensearchpy/helpers/actions.py#L492-L503
+        search_result = (
+            search.params(**scan_params).scan() if scan else search.execute()
+        )
 
         return self.result_list(
             self,
             identity,
             search_result,
             params,
-            links_tpl=LinksTemplate(
-                self.config.links_search,
-                context={
-                    "args": params,
-                    "community_id": community_id,
-                },
+            links_tpl=(
+                None
+                if scan
+                else LinksTemplate(
+                    self.config.links_search,
+                    context={
+                        "args": params,
+                        "community_id": community_id,
+                    },
+                )
             ),
             schema=schema,
         )
+
+    def read_memberships(self, identity):
+        """Searches the memberships of a specific user/identity."""
+        return {"memberships": self.config.record_cls.get_memberships(identity)}
 
     @unit_of_work()
     def update(self, identity, community_id, data, uow=None, refresh=False):
@@ -544,6 +602,7 @@ class MemberService(RecordService):
             "members_update",
             identity,
             record=member,
+            community=community,
             errors=None,
             uow=uow,
         )
@@ -587,6 +646,7 @@ class MemberService(RecordService):
                 "members_delete",
                 identity,
                 record=m,
+                community=community,
                 errors=None,
                 uow=uow,
             )

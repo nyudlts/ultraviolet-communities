@@ -46,6 +46,9 @@
           "confirmed": {
             "type": "boolean"
           },
+          "verified_at": {
+            "type": "date"
+          },
           "profile": {
             "properties": {
               "full_name": {
@@ -68,6 +71,21 @@
               },
               "email_visibility": {
                 "type": "keyword"
+              },
+              "locale": {
+                "type": "keyword",
+                "index": "false"
+              },
+              "timezone": {
+                "type": "keyword",
+                "index": "false"
+              },
+              "notifications": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
               }
             }
           }
