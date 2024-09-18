@@ -15,7 +15,6 @@ from datetime import datetime
 from babel.dates import format_datetime
 from flask import Blueprint, current_app, g, render_template, request, url_for
 from flask_login import current_user
-from flask_menu import current_menu
 from invenio_pidstore.errors import PIDDeletedError, PIDDoesNotExistError
 from invenio_records_resources.proxies import current_service_registry
 from invenio_records_resources.services.errors import PermissionDeniedError
@@ -193,55 +192,11 @@ def create_ui_blueprint(app):
 
     blueprint.add_url_rule(routes["invitations"], view_func=invitations)
 
-
-    @blueprint.before_app_first_request
-    def register_menus():
-        """Register community menu items."""
-        item = current_menu.submenu("main.communities")
-
-        # Removed communities from header
-
-        # item.register(
-        #     "invenio_communities.communities_frontpage",
-        #     "Communities",
-        #     order=3,
-        # )
-
-        item = current_menu.submenu("plus.community").register(
-            "invenio_communities.communities_new",
-            "New community",
-            order=3,
-        )
-
-        communities = current_menu.submenu("communities")
-        communities.submenu("requests").register(
-            "invenio_communities.communities_requests",
-            text=_("Requests"),
-            order=2,
-            expected_args=["pid_value"],
-            **dict(icon="comments", permissions="can_search_requests")
-        )
-        communities.submenu("members").register(
-            "invenio_communities.members",
-            text=_("Members"),
-            order=3,
-            expected_args=["pid_value"],
-            **dict(icon="users", permissions="can_read")
-        )
-        communities.submenu("settings").register(
-            "invenio_communities.communities_settings",
-            text=_("Settings"),
-            order=4,
-            expected_args=["pid_value"],
-            **dict(icon="settings", permissions="can_update")
-        )
-
     # theme injection view
     blueprint.add_url_rule(
         "/communities/<pid_value>/community-theme-<revision>.css",
         view_func=community_theme_css_config,
     )
-
 
     # Register error handlers
     blueprint.register_error_handler(
