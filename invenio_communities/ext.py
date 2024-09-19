@@ -128,11 +128,14 @@ def finalize_app(app):
 
 def register_menus(app):
     """Register community menu items."""
-    current_menu.submenu("main.communities").register(
-        endpoint="invenio_communities.communities_frontpage",
-        text=_("Communities"),
-        order=1,
-    )
+
+    # Removed communities from header
+    
+    # current_menu.submenu("main.communities").register(
+    #     endpoint="invenio_communities.communities_frontpage",
+    #     text=_("Communities"),
+    #     order=1,
+    # )
     current_menu.submenu("plus.community").register(
         endpoint="invenio_communities.communities_new",
         text=_("New community"),
