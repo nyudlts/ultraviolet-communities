@@ -130,7 +130,7 @@ def register_menus(app):
     """Register community menu items."""
 
     # Removed communities from header
-    
+
     # current_menu.submenu("main.communities").register(
     #     endpoint="invenio_communities.communities_frontpage",
     #     text=_("Communities"),
@@ -207,3 +207,7 @@ def init(app):
 
     # change notification handlers
     rr_ext.notification_registry.register("users", ext.service.on_relation_update)
+
+    # Register context processors
+    from .context import inject_context
+    app.context_processor(inject_context)
