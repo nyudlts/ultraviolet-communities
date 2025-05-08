@@ -1,6 +1,8 @@
 ..
     This file is part of Invenio.
     Copyright (C) 2016-2024 CERN.
+    Copyright (C) 2025 Graz University of Technology.
+    Copyright (C) 2025 KTH Royal Institute of Technology.
 
     Invenio is free software; you can redistribute it and/or modify it
     under the terms of the MIT License; see LICENSE file for more details.
@@ -8,6 +10,38 @@
 
 Changes
 =======
+
+Version 13.1.1 (released 2025-05-06)
+
+- dependencies: update axios to version 1.8.2
+- installation: add records-resources to requirements
+- tests: disable warnings entirely in logs
+
+Version 13.1.0 (released 2025-04-29)
+
+- i18n: pulled translations
+- i18n: push translations
+
+Version 13.0.11 (released 2025-03-18)
+
+- i18n: add missing translations for community settings
+- i18n: include jinja file encoding in babel.ini
+- i18h: fix translation only applied on app start
+
+Version 13.0.10 (released 2025-03-03)
+
+- remove dependency on invenio-admin in tests
+- bug: humanize byte size error on community image upload
+- Include missing JS on admin community_search.html
+
+Version 13.0.9 (released 2024-09-18)
+
+- mappings: add dynamic mappings for user profiles and preferences
+
+Version 13.0.8 (released 2024-09-17)
+
+- Members search: fix negative paging on empty search
+- v13.0.7 to ignore
 
 Version 13.0.6 (released 2024-08-05)
 
