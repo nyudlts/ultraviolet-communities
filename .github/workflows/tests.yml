@@ -6,32 +6,68 @@
 #
 # Invenio is free software; you can redistribute it and/or modify
 # it under the terms of the MIT License; see LICENSE file for more details.
+# -*- coding: utf-8 -*-
+#
+# Copyright (C) 2024 CERN.
 
-name: CI
+name: Python CI
 
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
-      - "maint-**"
-  schedule:
-    # * is a special character in YAML so you have to quote this string
-    - cron: "0 3 * * 6"
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      reason:
-        description: "Reason"
-        required: false
-        default: "Manual trigger"
+      python-version:
+        description: "Python versions"
+        type: string
+        # NOTE: There is no "array" type, so we use "string" and parse it in the matrix
+        default: '["3.9"]'
+      extras:
+        description: "Extra dependencies"
+        type: string
+        default: 'tests'
+      db-service:
+        description: "DB service"
+        type: string
+        default: '["postgresql14"]'
+      search-service:
+        description: "Search service"
+        type: string
+        default: '["opensearch2"]'
 
 jobs:
-  python-tests:
-    uses: inveniosoftware/workflows/.github/workflows/tests-python.yml@master
+  Tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJson(inputs.python-version) }}
+        db-service: ${{ fromJson(inputs.db-service) }}
+        search-service: ${{ fromJson(inputs.search-service) }}
 
-  JS:
-    uses: inveniosoftware/workflows/.github/workflows/tests-js.yml@master
-    with:
-      translations-working-directory: ./invenio_communities/assets/semantic-ui/translations/invenio_communities/
+    env:
+      DB: ${{ matrix.db-service }}
+      SEARCH: ${{ matrix.search-service }}
+      EXTRAS: ${{ inputs.extras }}${{ matrix.search-service && ',' || '' }}${{ matrix.search-service }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: setup.cfg
+
+      - name: Pre-install
+        uses: ./.github/actions/pre-install
+        if: ${{ hashFiles('.github/actions/pre-install/action.yml') != '' }}
+
+      - name: Install dependencies
+        run: |
+          pip install ".[$EXTRAS]"
+          pip freeze
+          docker version
+
+      - name: Run tests
+        run: ./run-tests.sh

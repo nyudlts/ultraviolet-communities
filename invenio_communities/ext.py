@@ -128,7 +128,6 @@ def finalize_app(app):
 
 def register_menus(app):
     """Register community menu items."""
-
     # Removed communities from header
 
     # current_menu.submenu("main.communities").register(
@@ -210,4 +209,5 @@ def init(app):
 
     # Register context processors
     from .context import inject_context
+
     app.context_processor(inject_context)

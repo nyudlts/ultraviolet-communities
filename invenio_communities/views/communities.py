@@ -15,11 +15,8 @@ from copy import deepcopy
 from flask import current_app, g, render_template
 from flask.templating import _render
 from flask_login import login_required
-
 from flask_principal import Permission, RoleNeed
-
 from invenio_i18n import lazy_gettext as _
-
 from invenio_records_resources.services.errors import PermissionDeniedError
 from invenio_vocabularies.proxies import current_service as vocabulary_service
 from jinja2 import TemplateError
